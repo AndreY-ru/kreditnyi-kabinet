@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -15,7 +16,7 @@ from app.domain.transitions import DomainError, ValidationFailed
 from app.models import Application, Company, CompanyMember, Product, User, utcnow
 from app.security import client_user, verify_csrf
 from app.services import applications as svc
-from app.services import precheck
+from app.services import intake, precheck
 from app.services.catalog import GOALS, TERMS, match_products
 from app.services.companies import add_company_by_inn, invite_member, require_member, self_check
 from app.services.validation import active_consent, validate
@@ -183,7 +184,25 @@ def podbor(request: Request, goal: str = "working", amount: str = "5 000 000", t
     matches = _matches(db, params, ctx["company"])
     check = self_check(db, ctx["company"]) if ctx["company"] else None
     return page(request, "client/podbor.html", {**ctx, "nav": "podbor", "p": params, "matches": matches,
-                                                "check": check, "terms": TERMS, "draft": draft})
+                                                "check": check, "terms": TERMS, "draft": draft,
+                                                "described": request.session.pop("described", None)})
+
+
+@router.post("/podbor/describe")
+def podbor_describe(request: Request, text: str = Form(""), user: User = Depends(client_user)):
+    """Подбор по описанию своими словами: разбираем текст и открываем обычный подбор с заполненной формой."""
+    text = text.strip()[:1000]
+    if not text:
+        return RedirectResponse("/podbor", 303)
+    r = intake.parse(text)
+    request.session["described"] = {"text": text, "summary": r.summary(), "missing": r.missing,
+                                    "source": r.source, "term": r.term}
+    q = {"goal": r.goal or "working", "amount": str(r.amount or ""),
+         "term": str(intake.nearest_term(r.term) if r.term else 12),
+         "guarantor": "" if r.guarantor is False else "1"}
+    if r.collateral:
+        q["collateral"] = "1"
+    return RedirectResponse("/podbor?" + urlencode(q), 303)
 
 
 def _matches(db: Session, p: dict, company: Company | None):

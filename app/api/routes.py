@@ -11,7 +11,7 @@ from app.models import Application, AuditLog, Company, CompanyMember, Product, S
 from app.security import admin_user, bank_user, client_user, current_user, verify_password
 from app.services import analyst as analyst_svc
 from app.services import applications as svc
-from app.services import precheck
+from app.services import intake, precheck
 from app.services.catalog import match_products
 from app.services.companies import add_company_by_inn, invite_member, require_member, self_check, user_companies
 from app.services.views import application_view, history_rows, label
@@ -82,6 +82,15 @@ def match(body: s.MatchIn, db: Session = Depends(get_db), user: User = Depends(c
 
 
 # --- Компании -----------------------------------------------------------------------
+
+@router.post("/podbor/parse", response_model=s.IntakeOut, tags=["catalog"])
+def podbor_parse(body: s.IntakeIn, user: User = Depends(current_user)):
+    """Задача своими словами → параметры подбора. Модель (если включена) понимает контекст, но числа берёт
+    только из текста; без модели — правила. Дальше — обычный /products/match."""
+    r = intake.parse(body.text)
+    return s.IntakeOut(goal=r.goal, amount=r.amount, term_months=r.term, has_collateral=r.collateral,
+                       has_guarantor=r.guarantor, source=r.source, missing=r.missing, summary=r.summary())
+
 
 @router.get("/companies", response_model=list[s.CompanyOut], tags=["companies"])
 def my_companies(db: Session = Depends(get_db), user: User = Depends(client_user)):

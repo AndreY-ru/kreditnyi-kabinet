@@ -133,6 +133,21 @@ class PrecheckOut(BaseModel):
     comfortable_amount: int | None
 
 
+class IntakeIn(BaseModel):
+    text: str = Field(min_length=1, max_length=1000, description="Задача своими словами")
+
+
+class IntakeOut(BaseModel):
+    goal: Goal | None
+    amount: int | None
+    term_months: int | None
+    has_collateral: bool | None
+    has_guarantor: bool | None
+    source: Literal["llm", "rules"] = Field(description="llm — модель (числа сверены с текстом), rules — правила")
+    missing: list[str]
+    summary: str
+
+
 class MemberIn(BaseModel):
     email: str
     position: str = "Сотрудник"

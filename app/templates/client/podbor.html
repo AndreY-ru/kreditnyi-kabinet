@@ -8,6 +8,27 @@
 <p class="muted" style="max-width:720px">Ответьте на четыре вопроса. Покажем подходящие продукты и заранее предупредим о том, что может повлиять на решение.</p>
 </div>
 
+{% if not draft %}
+<form method="post" action="/podbor/describe" class="card" aria-labelledby="desc-h" style="gap:12px">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<div class="between"><h2 id="desc-h" class="h3">Или опишите задачу своими словами</h2><span class="small muted">Заполним форму за вас — вы проверите и поправите</span></div>
+<label class="sr" for="desc">Описание задачи</label>
+<textarea id="desc" name="text" rows="2" class="txt" maxlength="1000" placeholder="Например: нужно 3 млн на закупку товара к сезону, отдам за полгода, есть грузовик в залог">{{ described.text if described else '' }}</textarea>
+<button type="submit" class="btn dark self-start">Разобрать и подобрать</button>
+</form>
+{% endif %}
+
+{% if described %}
+<section class="alert blue" role="status" aria-label="Как мы поняли запрос">
+<span class="ic">{{ icon('info', 22, 2) }}</span>
+<div class="txt">
+<strong class="h3" style="font-size:16px">Поняли так: {{ described.summary or 'почти ничего не нашли' }}</strong>
+<span>{% if described.missing %}Не нашли {{ described.missing|join(', ') }} — укажите ниже. {% endif %}{% if described.term and described.term != p.term %}В подборе выбрали ближайший срок — {{ p.term }} мес. {% endif %}Проверьте форму: продукты ниже уже подобраны.
+<span class="muted">· {% if described.source == 'llm' %}разобрано моделью с открытыми весами, числа сверены с вашим текстом{% else %}разобрано по ключевым словам{% endif %}</span></span>
+</div>
+</section>
+{% endif %}
+
 <div class="row">
 <form id="podbor-form" aria-label="Параметры подбора" class="card lg" style="flex:1 1 400px;min-width:0;gap:28px"
   action="/podbor" method="get"
