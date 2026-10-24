@@ -32,6 +32,8 @@
 | HTTPX | 0.28.1 | BSD-3-Clause | вызовы моков и LLM |
 | Jinja2 | 3.1.6 | BSD-3-Clause | шаблоны |
 | python-multipart | 0.0.32 | Apache-2.0 | формы и загрузка файлов |
+| openpyxl | 3.1.5 | MIT | чтение ОСВ из 1С (XLSX) для сверки с выручкой |
+| et_xmlfile | 2.0.0 | MIT | зависимость openpyxl |
 | itsdangerous | 2.2.0 | BSD-3-Clause | подпись cookie сессии |
 | tzdata | 2026.5 | Apache-2.0 | часовые пояса |
 | htmx | 2.0.11 | 0BSD | живое обновление интерфейса (`app/static/vendor/htmx.min.js`, лицензия рядом) |

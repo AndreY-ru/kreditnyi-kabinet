@@ -134,7 +134,18 @@
 <h2 id="ans-h" class="h3">Запрос клиенту</h2>
 <div class="panel stack-xs"><span class="m">{{ v.info.doc_kind }}</span><span class="small muted">Запрошено {{ v.info.created_at|dshort }} · срок {{ v.info.due_at|ddate }} · {{ {'OPEN': 'ждём ответ', 'ANSWERED': 'ответ получен', 'EXPIRED': 'срок истёк', 'CANCELLED': 'отменён'}[v.info.status] }}</span></div>
 {% if v.info.answer_comment %}<p><span class="muted">Комментарий клиента:</span> {{ v.info.answer_comment }}</p>{% endif %}
-{% for doc in v.documents %}<div class="file-row"><span class="file-ic" aria-hidden="true">{{ doc.filename.rsplit('.', 1)[-1][:4] }}</span><div class="stack-xs" style="flex:1;gap:0"><a class="m" href="/documents/{{ doc.id }}">{{ doc.filename }}</a><span class="small muted">{{ (doc.size / 1024)|round|int }} КБ · sha256 {{ doc.sha256[:8] }}…</span></div></div>{% endfor %}
+{% for doc in v.documents %}<div class="file-row"><span class="file-ic" aria-hidden="true">{{ doc.filename.rsplit('.', 1)[-1][:4] }}</span><div class="stack-xs" style="flex:1;gap:0"><a class="m" href="/documents/{{ doc.id }}">{{ doc.filename }}</a><span class="small muted">{{ (doc.size / 1024)|round|int }} КБ · sha256 {{ doc.sha256[:8] }}…</span></div></div>
+{% set ck = v.doc_checks.get(doc.id) %}
+{% if ck and ck.recognized %}
+<div class="panel {% if ck.verdict == 'match' %}blue{% elif ck.verdict == 'mismatch' %}amber{% endif %} stack-xs" style="padding:12px 14px">
+<span><strong class="b">Распознано:</strong> ОСВ по счёту 62{% if ck.period %} за {{ ck.period }}{% endif %}. Обороты по дебету (отгрузки покупателям): <strong class="b">{{ ck.debit|money }}</strong>.</span>
+<span>{% if ck.verdict == 'match' %}Сходится с выручкой из заявки {{ ck.declared|mln }}{% if ck.with_vat %} с учётом НДС 20 %{% endif %}.{% elif ck.verdict == 'mismatch' %}В заявке выручка {{ ck.declared|mln }} — расхождение {{ ck.diff_pct }} % даже с учётом НДС. Стоит уточнить у клиента.{% else %}Выручки в заявке нет — сравнить не с чем.{% endif %}</span>
+<span class="xs muted">Распознано автоматически по выгрузке 1С · подсказка, решение за вами</span>
+</div>
+{% elif ck %}
+<div class="panel" style="padding:12px 14px"><span class="small">Автоматически не распознали ({{ ck.problem }}) — проверьте вручную.</span></div>
+{% endif %}
+{% endfor %}
 </section>
 {% endif %}
 </div>

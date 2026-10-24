@@ -22,6 +22,7 @@ from app.models import (
     ScoringResult,
     StatusHistory,
 )
+from app.services import documents
 from app.services.explain import positives_for, reasons_for
 
 # Клиентские подписи событий журнала
@@ -113,6 +114,9 @@ def application_view(db: Session, app: Application, *, bank: bool = False) -> di
         "history": client_history(app),
     }
     if bank:
+        revenue = app.financials.revenue if app.financials else None
+        v["doc_checks"] = {d.id: documents.check(d.kind, d.filename, d.storage_path, d.sha256, revenue)
+                           for d in docs}
         v["checks"] = db.scalars(select(ExternalCheck).where(ExternalCheck.application_id == app.id)
                                  .order_by(ExternalCheck.id)).all()
         v["task"] = db.scalar(select(ReviewTask).where(ReviewTask.application_id == app.id)
