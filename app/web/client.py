@@ -196,7 +196,7 @@ def podbor_describe(request: Request, text: str = Form(""), user: User = Depends
         return RedirectResponse("/podbor", 303)
     r = intake.parse(text)
     request.session["described"] = {"text": text, "summary": r.summary(), "missing": r.missing,
-                                    "source": r.source, "term": r.term}
+                                    "source": r.source, "filled": r.model_filled, "term": r.term}
     q = {"goal": r.goal or "working", "amount": str(r.amount or ""),
          "term": str(intake.nearest_term(r.term) if r.term else 12),
          "guarantor": "" if r.guarantor is False else "1"}

@@ -192,3 +192,9 @@ def test_safe_text_rules():
     assert llm.safe_text("Пожалуйста, приложите ведомость по счёту 62, она поможет нам.", source=src) is None
     assert llm.safe_text("Одобрим сразу после ведомости по счёту 62, обещаем.", source=src) is not None
     assert llm.numbers("1 000 000 и 2,5") == {"1000000", "2.5"}
+
+
+def test_describe_tells_what_model_filled(model):
+    model({"goal": "new_direction", "amount_rub": 2_000_000, "term_months": 18})
+    page = web_login("anna@demo.local").post("/podbor/describe", data={"text": HARD}).text
+    assert "Цель, сумму уточнила модель с открытыми весами" in page

@@ -24,7 +24,7 @@
 <div class="txt">
 <strong class="h3" style="font-size:16px">Поняли так: {{ described.summary or 'почти ничего не нашли' }}</strong>
 <span>{% if described.missing %}Не нашли {{ described.missing|join(', ') }} — укажите ниже. {% endif %}{% if described.term and described.term != p.term %}В подборе выбрали ближайший срок — {{ p.term }} мес. {% endif %}Проверьте форму: продукты ниже уже подобраны.
-<span class="muted">· {% if described.source == 'llm' %}разобрано моделью с открытыми весами, числа сверены с вашим текстом{% else %}разобрано по ключевым словам{% endif %}</span></span>
+<span class="muted">· {% if described.source == 'llm' %}{{ (described.filled or [])|join(', ')|capitalize }} уточнила модель с открытыми весами, числа — только из вашего текста{% else %}разобрано по ключевым словам{% endif %}</span></span>
 </div>
 </section>
 {% endif %}
