@@ -43,7 +43,8 @@ def test_t2_young_company_declined_with_reason_and_alternative(anna, db):
     assert [r["code"] for r in res["reasons"]] == ["BUSINESS_AGE"]
     assert "порог" not in res["reasons"][0]["text"]  # пороги клиенту не раскрываем
     d = db.query(Decision).filter_by(application_id=app["id"], outcome="DECLINED").one()
-    assert "alternatives" in d.conditions  # предложить другой продукт (если подходит по сроку)
+    # другой продукт, под который компания проходит по сроку работы, — не пустой список
+    assert [a["name"] for a in d.conditions["alternatives"]] == ["Кредит на старт бизнеса"]
 
 
 def test_t3_active_overdue_in_bki_declined(anna):

@@ -17,7 +17,7 @@ from app.models import Company, CompanyMember, Product, ScoringModel, User
 from app.security import hash_password
 from app.services import analyst as an
 from app.services import applications as svc
-from app.services.companies import add_company_by_inn, add_member
+from app.services.companies import add_company_by_inn, add_member, add_member
 from app.services.scoring import DEFAULT_MODEL
 from app.worker import run_pending
 
@@ -52,6 +52,11 @@ PRODUCTS = [
          goals=["working", "equipment", "new_direction"], min_amount=1_000_000, max_amount=50_000_000,
          min_term=12, max_term=36, min_business_months=12, requires_collateral=False, unsecured_max=None,
          requires_guarantor=True, base_rate=Decimal("16.50"), auto_limit=0, decision_days=10, gov_support=True),
+    dict(code="START", name="Кредит на старт бизнеса", kind="LOAN",
+         description="Для компаний и ИП от 3 месяцев работы: небольшая сумма под поручительство собственника.",
+         goals=["working", "equipment", "new_direction", "cash_gap"], min_amount=300_000, max_amount=3_000_000,
+         min_term=6, max_term=24, min_business_months=3, requires_collateral=False, unsecured_max=None,
+         requires_guarantor=True, base_rate=Decimal("21.50"), auto_limit=0, decision_days=3, gov_support=False),
 ]
 
 USERS = [

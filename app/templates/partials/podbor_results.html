@@ -1,7 +1,9 @@
 {% if not matches %}
 <section class="card"><span class="h3">Укажите сумму, чтобы подобрать продукт</span></section>
 {% else %}
-<h2 class="h2" style="margin-top:8px">Подходит под вашу задачу · {{ matches|selectattr('eligible')|list|length }} {{ plural(matches|selectattr('eligible')|list|length, 'продукт', 'продукта', 'продуктов') }}</h2>
+{% set n_ok = matches|selectattr('eligible')|list|length %}
+{% if n_ok %}<h2 class="h2" style="margin-top:8px">Подходит под вашу задачу · {{ n_ok }} {{ plural(n_ok, 'продукт', 'продукта', 'продуктов') }}</h2>
+{% else %}<h2 class="h2" style="margin-top:8px">С этими параметрами ничего не подходит</h2><p class="muted" style="margin:0">Измените сумму или срок — ниже видно, что именно мешает.</p>{% endif %}
 {% for m in matches %}
 {% set pr = m.product %}
 <article class="card" style="{% if loop.first and m.eligible %}border:2px solid var(--ink);gap:16px{% else %}border:1px solid var(--line){% endif %}">

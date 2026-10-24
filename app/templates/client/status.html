@@ -145,8 +145,17 @@
 <div class="offer-box" style="gap:10px">
 <span class="small b" style="color:var(--blue)">Что можно сделать</span>
 <strong class="h3" style="font-size:18px">{{ a.name }} до {{ a.max_amount|mln }}</strong>
-<span class="ink2">Компания подходит по сроку работы. Данные компании и финансы уже заполнены — останется подтвердить согласия.</span>
-<a href="/podbor?goal={{ app.goal }}&amount={{ app.amount }}&term={{ app.term_months }}{% if app.has_guarantor %}&guarantor=1{% endif %}" class="btn primary lg self-start">Подобрать другой продукт</a>
+{% set alt_amount = [[app.amount, a.min_amount]|max, a.max_amount]|min %}
+{% set alt_term = [[app.term_months, a.min_term]|max, a.max_term]|min %}
+<span class="ink2">Компания подходит по сроку работы. Данные компании и финансы перенесём из этой заявки — останется проверить и подтвердить согласия.{% if alt_amount != app.amount or alt_term != app.term_months %} Условия подстроим под продукт: {{ alt_amount|money }} на {{ alt_term }} мес.{% endif %}</span>
+<form method="post" action="/applications/new" class="self-start">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<input type="hidden" name="product_id" value="{{ a.id }}"><input type="hidden" name="goal" value="{{ app.goal }}">
+<input type="hidden" name="amount" value="{{ alt_amount }}"><input type="hidden" name="term" value="{{ alt_term }}">
+{% if app.has_collateral %}<input type="hidden" name="collateral" value="1">{% endif %}
+{% if app.has_guarantor or a.requires_guarantor %}<input type="hidden" name="guarantor" value="1">{% endif %}
+<button type="submit" class="btn primary lg">Оформить «{{ a.name }}»</button>
+</form>
 </div>
 {% endfor %}
 {% else %}
