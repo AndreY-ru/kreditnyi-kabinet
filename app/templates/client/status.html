@@ -126,7 +126,6 @@
 </ul>
 </div>
 {% endif %}
-{% if d and d.explanation_source == 'LLM' %}<p class="small panel">{{ d.explanation }} <span class="muted">· пересказано моделью с открытыми весами</span></p>{% endif %}
 {% include "partials/offer_actions.html" %}
 </section>
 {% endif %}
@@ -139,7 +138,6 @@
 {% for r in v.reasons %}
 <div class="reason red"><span class="dot-ic bad">{{ icon('x') }}</span><div class="stack-xs" style="gap:0"><span class="t">{{ r.title }}</span><span class="s">{{ r.text }} {{ r.action }}</span></div></div>
 {% endfor %}
-{% if d and d.explanation_source == 'LLM' %}<p class="small panel">{{ d.explanation }} <span class="muted">· пересказано моделью с открытыми весами</span></p>{% endif %}
 {% if alts %}
 {% for a in alts %}
 <div class="offer-box" style="gap:10px">

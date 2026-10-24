@@ -28,7 +28,7 @@ from app.models import (
 )
 from app.services.applications import open_tasks
 from app.services.credit_logic import annuity
-from app.services.explain import REASONS, enqueue_rephrase, explain
+from app.services.explain import REASONS, explain
 from app.services.pipeline import make_offer
 
 DECISION_KINDS = {
@@ -203,7 +203,6 @@ def decide(
         make_offer(db, app, d, amount=amount, term=term_months, rate=rate_d,
                    monthly=annuity(amount, rate_d, term_months))
         _close_tasks(db, app)
-        enqueue_rephrase(db, app.id, target.value)
     elif kind == "decline":
         if not reasons:
             raise ValidationFailed("Отметьте причины для клиента", code="reasons_required")
@@ -214,7 +213,6 @@ def decide(
                      reason_codes=reasons, comment=comment.strip(), explanation=text, explanation_source=src)
         db.add(d)
         _close_tasks(db, app)
-        enqueue_rephrase(db, app.id, "DECLINED")
     else:  # info
         if not (doc_kind or "").strip():
             raise ValidationFailed("Выберите, что запросить у клиента", code="doc_required")
