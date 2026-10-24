@@ -60,6 +60,11 @@ def anna():
 
 
 @pytest.fixture
+def igor():
+    return api_client("igor@demo.local")
+
+
+@pytest.fixture
 def maria():
     return api_client("maria@bank.local")
 

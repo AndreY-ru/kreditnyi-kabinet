@@ -19,18 +19,26 @@
 {% endif %}
 
 {% for c in attention %}
-<section aria-label="Требуется действие" class="alert">
-<span class="ic">{{ icon('warn', 22, 2) }}</span>
+{% set st = c.app.status %}
+{% set good = st in ('APPROVED_AUTO', 'APPROVED', 'COUNTEROFFER', 'SIGNING') %}
+<section aria-label="Требуется действие" class="alert {% if good %}blue{% endif %}">
+<span class="ic">{{ icon('info' if good else 'warn', 22, 2) }}</span>
 <div class="txt">
-{% if c.app.status == 'NEEDS_INFO' and c.info %}
+{% if st == 'NEEDS_INFO' and c.info %}
 <strong class="h3" style="font-size:16px">Банку нужны данные по заявке {{ c.app.number }}</strong>
 <span>{{ c.info.doc_kind }}. Ответьте до {{ c.info.due_at|ddate }}, иначе заявка закроется.</span>
+{% elif st == 'SIGNING' %}
+<strong class="h3" style="font-size:16px">Договор по заявке {{ c.app.number }} ждёт вашей подписи</strong>
+<span>Предложение принято, документы готовы. После подписи деньги поступят на счёт.</span>
+{% elif good %}
+<strong class="h3" style="font-size:16px">Есть решение по заявке {{ c.app.number }}</strong>
+<span>{% if st == 'COUNTEROFFER' %}Банк предлагает другие условия.{% else %}Кредит одобрен.{% endif %}{% if c.offer %} Предложение действует до {{ c.offer.valid_until|ddate }}.{% endif %}</span>
 {% else %}
 <strong class="h3" style="font-size:16px">Исправьте данные в заявке {{ c.app.number }}</strong>
 <span>При проверке нашли ошибки — исправьте и отправьте заявку снова.</span>
 {% endif %}
 </div>
-<a href="{% if c.app.status == 'NEEDS_INFO' %}/applications/{{ c.app.id }}{% else %}/applications/{{ c.app.id }}/edit?check=1{% endif %}" class="btn dark">{% if c.app.status == 'NEEDS_INFO' %}Дополнить заявку{% else %}Исправить{% endif %}</a>
+<a href="{% if st == 'NEEDS_CORRECTION' %}/applications/{{ c.app.id }}/edit?check=1{% else %}/applications/{{ c.app.id }}{% endif %}" class="btn dark">{% if st == 'NEEDS_INFO' %}Дополнить заявку{% elif st == 'SIGNING' %}Подписать{% elif good %}Посмотреть предложение{% else %}Исправить{% endif %}</a>
 </section>
 {% endfor %}
 

@@ -98,6 +98,21 @@ class SelfCheckItem(BaseModel):
     text: str
 
 
+class MemberIn(BaseModel):
+    email: str
+    position: str = "Сотрудник"
+    can_apply: bool = True
+    can_sign: bool = False
+
+
+class MemberOut(BaseModel):
+    user_id: int
+    full_name: str
+    position: str
+    can_apply: bool
+    can_sign: bool
+
+
 class ApplicationCreate(BaseModel):
     company_id: int
     product_id: int

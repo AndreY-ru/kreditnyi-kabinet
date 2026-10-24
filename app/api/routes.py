@@ -7,12 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.api import schemas as s
 from app.db import get_db
-from app.models import Application, AuditLog, Company, Product, ScoringModel, User
+from app.models import Application, AuditLog, Company, CompanyMember, Product, ScoringModel, User
 from app.security import admin_user, bank_user, client_user, current_user, verify_password
 from app.services import analyst as analyst_svc
 from app.services import applications as svc
 from app.services.catalog import match_products
-from app.services.companies import add_company_by_inn, require_member, self_check, user_companies
+from app.services.companies import add_company_by_inn, invite_member, require_member, self_check, user_companies
 from app.services.views import application_view, history_rows, label
 
 router = APIRouter(prefix="/api")
@@ -97,7 +97,27 @@ def add_company(body: s.CompanyIn, db: Session = Depends(get_db), user: User = D
 @router.get("/companies/{company_id}/self-check", response_model=list[s.SelfCheckItem], tags=["companies"])
 def company_self_check(company_id: int, db: Session = Depends(get_db), user: User = Depends(client_user)):
     require_member(db, user, company_id)
-    return self_check(db.get(Company, company_id))["items"]
+    return self_check(db, db.get(Company, company_id))["items"]
+
+
+@router.get("/companies/{company_id}/members", response_model=list[s.MemberOut], tags=["companies"])
+def company_members(company_id: int, db: Session = Depends(get_db), user: User = Depends(client_user)):
+    require_member(db, user, company_id)
+    rows = db.scalars(select(CompanyMember).where(CompanyMember.company_id == company_id)
+                      .order_by(CompanyMember.id)).all()
+    return [s.MemberOut(user_id=m.user_id, full_name=m.user.full_name, position=m.position, can_apply=m.can_apply,
+                        can_sign=m.can_sign) for m in rows]
+
+
+@router.post("/companies/{company_id}/members", response_model=s.MemberOut, status_code=201, tags=["companies"])
+def company_invite(company_id: int, body: s.MemberIn, db: Session = Depends(get_db),
+                   user: User = Depends(client_user)):
+    """Руководитель (право подписи) добавляет коллегу. Подключиться к чужой компании по ИНН нельзя."""
+    m = invite_member(db, user, company_id, email=body.email, position=body.position, can_apply=body.can_apply,
+                      can_sign=body.can_sign)
+    db.commit()
+    return s.MemberOut(user_id=m.user_id, full_name=m.user.full_name, position=m.position, can_apply=m.can_apply,
+                       can_sign=m.can_sign)
 
 
 # --- Заявки (клиент) ---------------------------------------------------------------

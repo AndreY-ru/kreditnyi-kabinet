@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain.transitions import DomainError, Forbidden, NotFound, ValidationFailed
-from app.models import AuditLog, Company, CompanyMember, User, utcnow
+from app.models import AuditLog, Company, CompanyMember, Product, User, utcnow
 from app.services import integrations
 
 
@@ -59,12 +59,35 @@ def require_member(db: Session, user: User, company_id: int, *, apply: bool = Fa
     return m
 
 
+def add_member(db: Session, company: Company, user: User, *, position: str, can_apply: bool = True,
+               can_sign: bool = False, authority: str | None = None, actor: User | None = None) -> CompanyMember:
+    m = CompanyMember(user_id=user.id, company_id=company.id, position=position or "Представитель",
+                      can_apply=can_apply, can_sign=can_sign, authority=authority)
+    db.add(m)
+    db.add(AuditLog(actor_id=(actor or user).id, action="company.member_add", entity="company", entity_id=company.id,
+                    data={"user": user.email, "can_apply": can_apply, "can_sign": can_sign}))
+    db.flush()
+    return m
+
+
 def add_company_by_inn(db: Session, user: User, inn: str, position: str, authority: str | None = None) -> Company:
+    """Подключить компанию к кабинету.
+
+    Первый подключивший становится администратором компании в кабинете (в реальном банке полномочия
+    подтверждаются ЭП или доверенностью — здесь смоделировано). Остальных сотрудников добавляет
+    руководитель с правом подписи (invite_member): иначе любой клиент получил бы доступ к чужим заявкам по ИНН.
+    """
     inn = inn.strip()
     if not inn_is_valid(inn):
         raise ValidationFailed("Проверьте ИНН: 10 цифр для организации, 12 для ИП", code="inn_invalid")
     company = db.scalar(select(Company).where(Company.inn == inn))
-    if company is None:
+    if company is not None:
+        if membership(db, user, company.id) is not None:
+            return company
+        if db.scalar(select(CompanyMember.id).where(CompanyMember.company_id == company.id).limit(1)) is not None:
+            raise Forbidden("Компания уже подключена к кабинету. Доступ выдаёт руководитель: попросите его "
+                            "добавить вас в разделе «Компания».", code="company_taken")
+    else:
         res = integrations.fns_egrul(inn)
         if res.http_status == 404:
             raise NotFound("Компания с таким ИНН не найдена в реестре")
@@ -77,25 +100,39 @@ def add_company_by_inn(db: Session, user: User, inn: str, position: str, authori
             company.employees = t.response.get("employees")
         db.add(company)
         db.flush()
-    if membership(db, user, company.id) is None:
-        db.add(CompanyMember(user_id=user.id, company_id=company.id, position=position or "Представитель",
-                             can_apply=True, authority=authority))
-        db.add(AuditLog(actor_id=user.id, action="company.link", entity="company", entity_id=company.id,
-                        data={"inn": inn}))
-    db.flush()
+    add_member(db, company, user, position=position, can_apply=True, can_sign=True,
+               authority=authority or "Полномочия подтверждены при подключении (смоделировано)")
     return company
 
 
-def self_check(company: Company) -> dict:
+def invite_member(db: Session, inviter: User, company_id: int, *, email: str, position: str,
+                  can_apply: bool, can_sign: bool) -> CompanyMember:
+    """Руководитель добавляет коллегу в команду компании (J5: заявку готовит бухгалтер, подписывает директор)."""
+    m = require_member(db, inviter, company_id)
+    if not m.can_sign:
+        raise Forbidden("Добавлять сотрудников может руководитель с правом подписи", code="no_sign_right")
+    target = db.scalar(select(User).where(User.email == email.strip().lower()))
+    if target is None or target.role != "CLIENT":
+        raise NotFound("Пользователь с таким email не зарегистрирован в кабинете", code="user_not_found")
+    if membership(db, target, company_id) is not None:
+        raise ValidationFailed(f"{target.full_name} уже в команде", code="already_member")
+    company = db.get(Company, company_id)
+    assert company is not None
+    return add_member(db, company, target, position=position, can_apply=can_apply, can_sign=can_sign,
+                      authority=f"Добавлен(а) руководителем: {inviter.full_name}", actor=inviter)
+
+
+def self_check(db: Session, company: Company) -> dict:
     """Предварительная самопроверка по частым причинам отказа. В кредитную историю не попадает."""
     items = []
     months = company.business_months()
     if months is not None:
         years = months // 12
         disp = f"{years} лет" if years >= 5 else (f"{years} г." if years else f"{months} мес.")
-        ok = months >= 9
+        min_months = db.scalar(select(func.min(Product.min_business_months)).where(Product.active.is_(True))) or 0
+        ok = months >= min_months
         items.append({"title": "Срок работы бизнеса", "ok": ok,
-                      "text": f"{disp} — больше минимума продуктов" if ok else f"{disp} — меньше минимума большинства продуктов"})
+                      "text": f"{disp} — подходит для продуктов банка" if ok else f"{disp} — меньше минимума всех продуктов"})
     st_ok = company.status == "ACTIVE"
     items.append({"title": "Статус компании", "ok": st_ok,
                   "text": "Действует, нет ликвидации и реорганизации" if st_ok else "В реестре отмечена ликвидация или реорганизация"})

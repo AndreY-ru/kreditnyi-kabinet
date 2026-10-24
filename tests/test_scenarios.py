@@ -14,7 +14,7 @@ from tests.helpers import (
 )
 
 
-def test_t1_stable_company_small_amount_auto_approved_to_disbursed(anna):
+def test_t1_stable_company_small_amount_auto_approved_to_disbursed(anna, igor):
     app = draft(anna, SV, "WORKING", 1_000_000, 12)
     consent_all(anna, app["id"])
     res = submit_and_process(anna, app["id"])
@@ -23,7 +23,10 @@ def test_t1_stable_company_small_amount_auto_approved_to_disbursed(anna):
     assert res["offer"]["monthly_payment"] > 0
 
     assert anna.post(f"/api/applications/{app['id']}/offer/accept").json()["status"] == "SIGNING"
-    assert anna.post(f"/api/applications/{app['id']}/sign").json()["status"] == "DISBURSED"
+    # J5: финдиректор готовит и принимает, договор подписывает гендиректор с правом подписи
+    r = anna.post(f"/api/applications/{app['id']}/sign")
+    assert r.status_code == 403 and "Игорь Смирнов" in r.json()["message"]
+    assert igor.post(f"/api/applications/{app['id']}/sign").json()["status"] == "DISBURSED"
     assert statuses(anna, app["id"]) == ["DRAFT", "SUBMITTED", "VALIDATING", "ENRICHING", "SCORING", "APPROVED_AUTO",
                                          "OFFER_ACCEPTED", "SIGNING", "DISBURSED"]
 
@@ -53,7 +56,7 @@ def test_t3_active_overdue_in_bki_declined(anna):
     assert "PAYMENT_HISTORY" in [r["code"] for r in res["reasons"]]
 
 
-def test_t4_gray_zone_large_amount_counteroffer_accepted(anna, maria):
+def test_t4_gray_zone_large_amount_counteroffer_accepted(anna, igor, maria):
     app = draft(anna, SV, "CREDIT_LINE", 12_000_000, 36, goal="equipment")
     consent_all(anna, app["id"])
     res = submit_and_process(anna, app["id"])
@@ -73,7 +76,7 @@ def test_t4_gray_zone_large_amount_counteroffer_accepted(anna, maria):
     assert {r["code"] for r in client_view["reasons"]} == {"COLLATERAL", "DEBT_LOAD"}
 
     anna.post(f"/api/applications/{app['id']}/offer/accept")
-    assert anna.post(f"/api/applications/{app['id']}/sign").json()["status"] == "DISBURSED"
+    assert igor.post(f"/api/applications/{app['id']}/sign").json()["status"] == "DISBURSED"
     assert statuses(anna, app["id"])[-5:] == ["MANUAL_REVIEW", "COUNTEROFFER", "OFFER_ACCEPTED", "SIGNING", "DISBURSED"]
 
 

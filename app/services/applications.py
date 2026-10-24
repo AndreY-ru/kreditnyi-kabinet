@@ -15,7 +15,7 @@ from app.config import settings
 from app.domain.states import EDITABLE, OFFER_STATES, Actor, S
 from app.domain.transitions import (
     ActorRef,
-    DomainError,
+    Forbidden,
     InvalidTransition,
     NotFound,
     ValidationFailed,
@@ -26,6 +26,7 @@ from app.models import (
     ApplicationSnapshot,
     AuditLog,
     Company,
+    CompanyMember,
     Consent,
     Contract,
     Disbursement,
@@ -87,6 +88,7 @@ def create_draft(
     amount: int, term_months: int, goal: str, has_collateral: bool, has_guarantor: bool,
 ) -> Application:
     require_member(db, user, company.id, apply=True)
+    _require_active(product)
     app = Application(
         company_id=company.id, product_id=product.id, created_by=user.id, amount=amount,
         term_months=term_months, goal=goal, has_collateral=has_collateral, has_guarantor=has_guarantor,
@@ -126,14 +128,23 @@ def _require_editable(app: Application) -> None:
         raise InvalidTransition("Заявку уже отправили — её нельзя изменить", code="not_editable")
 
 
+def _require_active(product: Product | None) -> None:
+    if product is None or not product.active:
+        raise ValidationFailed("Продукт не найден или больше не выдаётся", code="product_unavailable")
+
+
 def update_params(db: Session, app: Application, *, amount: int | None = None, term_months: int | None = None,
                   goal: str | None = None, has_collateral: bool | None = None,
                   has_guarantor: bool | None = None, collateral_desc: str | None = None,
                   product_id: int | None = None) -> Application:
     _require_editable(app)
+    if product_id is not None and product_id != app.product_id:
+        product = db.get(Product, product_id)
+        _require_active(product)
+        app.product = product  # через связь, чтобы app.product не остался прежним до конца сессии
     for name, value in (("amount", amount), ("term_months", term_months), ("goal", goal),
                         ("has_collateral", has_collateral), ("has_guarantor", has_guarantor),
-                        ("collateral_desc", collateral_desc), ("product_id", product_id)):
+                        ("collateral_desc", collateral_desc)):
         if value is not None:
             setattr(app, name, value)
     app.updated_at = utcnow()
@@ -388,13 +399,20 @@ def _aware(dt: datetime) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
+def signers(db: Session, company_id: int) -> list[User]:
+    return list(db.scalars(select(User).join(CompanyMember, CompanyMember.user_id == User.id)
+                           .where(CompanyMember.company_id == company_id, CompanyMember.can_sign.is_(True))
+                           .order_by(User.id)))
+
+
 def sign(db: Session, app: Application, user: User) -> Application:
     """Мок подписания (ПЭП) и мок выдачи. Реальные деньги не переводятся."""
     m = require_member(db, user, app.company_id)
     if app.status != S.SIGNING:
         raise InvalidTransition("Договор сейчас не ожидает подписи", code="not_signing")
-    if not m.can_sign and not m.can_apply:
-        raise DomainError("Нет права подписи", code="no_sign_right")
+    if not m.can_sign:
+        names = ", ".join(s.full_name for s in signers(db, app.company_id)) or "руководитель компании"
+        raise Forbidden(f"Договор подписывает сотрудник с правом подписи: {names}", code="no_sign_right")
     contract = db.scalar(select(Contract).where(Contract.application_id == app.id))
     offer = active_offer(db, app)
     assert contract is not None and offer is not None

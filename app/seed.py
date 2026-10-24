@@ -17,7 +17,7 @@ from app.models import Company, CompanyMember, Product, ScoringModel, User
 from app.security import hash_password
 from app.services import analyst as an
 from app.services import applications as svc
-from app.services.companies import add_company_by_inn
+from app.services.companies import add_company_by_inn, add_member
 from app.services.scoring import DEFAULT_MODEL
 from app.worker import run_pending
 
@@ -113,10 +113,13 @@ def seed_reference(db: Session) -> None:
     db.commit()
     for email, inn, position, can_apply, can_sign, authority in MEMBERS:
         user = _user(db, email)
-        company = add_company_by_inn(db, user, inn, position, authority)
+        company = db.scalar(select(Company).where(Company.inn == inn))
+        if company is None:
+            company = add_company_by_inn(db, user, inn, position, authority)
         m = db.scalar(select(CompanyMember).where(CompanyMember.user_id == user.id,
                                                   CompanyMember.company_id == company.id))
-        assert m is not None
+        if m is None:  # второй и следующие участники: в кабинете их добавляет руководитель
+            m = add_member(db, company, user, position=position)
         m.can_apply, m.can_sign, m.authority, m.position = can_apply, can_sign, authority, position
     db.commit()
 

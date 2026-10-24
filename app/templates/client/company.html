@@ -26,6 +26,35 @@
 {% else %}
 <section class="card"><p class="muted">Пока нет ни одной компании.</p></section>
 {% endfor %}
+
+{% if company %}
+<section class="card" aria-labelledby="team-h" style="gap:14px">
+<div class="between"><h2 id="team-h" class="h3">Команда {{ company.name }}</h2><span class="small muted">Кто может работать с заявками</span></div>
+{% for m in team %}
+<div class="member">
+<span class="avatar sm {% if m.user_id != user.id %}light{% endif %}" aria-hidden="true">{{ m.user.initials }}</span>
+<div class="who"><span class="m">{{ m.user.full_name }}{% if m.user_id == user.id %} (вы){% endif %}</span>
+<span class="small muted">{{ m.position }} · {% if m.can_sign %}оформляет заявки и подписывает договоры{% elif m.can_apply %}оформляет заявки, договор подписывает руководитель{% else %}только просмотр{% endif %}</span></div>
+</div>
+{% endfor %}
+{% if me and me.can_sign %}
+<form method="post" action="/company/invite" class="stack-sm panel" style="gap:12px">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<span class="m">Добавить сотрудника</span>
+{% if invite_error %}<span class="err" role="alert">{{ invite_error }}</span>{% endif %}
+<div class="grid2" style="gap:12px">
+<div class="field"><label for="inv-email">Email в кабинете</label><input class="txt" id="inv-email" name="email" type="email" required placeholder="elena@demo.local"></div>
+<div class="field"><label for="inv-pos">Должность</label><input class="txt" id="inv-pos" name="position" placeholder="Главный бухгалтер"></div>
+</div>
+<label class="cb"><input type="checkbox" name="can_sign" value="1"><span class="m">Может подписывать договоры</span></label>
+<button class="btn self-start" type="submit">Добавить в команду</button>
+<span class="xs muted">Без права подписи сотрудник готовит заявки, а договор подписывает руководитель. Так в кабинете распределяются роли бухгалтера и директора.</span>
+</form>
+{% else %}
+<p class="small muted" style="margin:0">Добавлять сотрудников может руководитель с правом подписи.</p>
+{% endif %}
+</section>
+{% endif %}
 </div>
 <aside class="col-side">
 <form class="card" method="post" action="/company/add">
@@ -36,8 +65,9 @@
 <label for="inn">ИНН</label>
 <input class="txt" id="inn" name="inn" inputmode="numeric" maxlength="12" value="{{ inn }}" {% if error %}aria-invalid="true" aria-describedby="inn-err"{% endif %} required>
 {% if error %}<span id="inn-err" class="err">{{ error }}</span>{% endif %}
-<span class="hint">Например, 7724112230 (синтетическая компания)</span>
+<span class="hint">Например, 7713550120 — синтетическая ООО «Новый горизонт», ещё не подключена</span>
 </div>
+<p class="xs muted" style="margin:0">Если компания уже подключена к кабинету, доступ к ней выдаёт её руководитель.</p>
 <div class="field"><label for="position">Ваша должность</label><input class="txt" id="position" name="position" value="Финансовый директор"></div>
 <button class="btn primary" type="submit">Найти и добавить</button>
 </form>

@@ -16,7 +16,7 @@ from app.models import Application, Company, CompanyMember, Product, User, utcno
 from app.security import client_user, verify_csrf
 from app.services import applications as svc
 from app.services.catalog import GOALS, TERMS, match_products
-from app.services.companies import add_company_by_inn, require_member, self_check
+from app.services.companies import add_company_by_inn, invite_member, require_member, self_check
 from app.services.validation import active_consent, validate
 from app.services.views import application_view, label
 from app.web.common import active_company, flash, page, partial
@@ -81,9 +81,10 @@ def _filled(db: Session, app: Application) -> dict:
 def home(request: Request, tab: str = "active", db: Session = Depends(get_db), user: User = Depends(client_user)):
     ctx = _company_ctx(request, db, user)
     cards, counts = _app_cards(db, ctx["company"], tab)
-    attention = [c for c in cards if c["app"].status in (S.NEEDS_INFO, S.NEEDS_CORRECTION)]
     member = db.scalar(select(CompanyMember).where(CompanyMember.user_id == user.id,
                                                    CompanyMember.company_id == ctx["company"].id)) if ctx["company"] else None
+    attention = [c for c in cards if c["app"].status in (S.NEEDS_INFO, S.NEEDS_CORRECTION, *OFFER_STATES)
+                 or (c["app"].status == S.SIGNING and member and member.can_sign)]
     team = db.scalars(select(CompanyMember).where(CompanyMember.company_id == ctx["company"].id)).all() if ctx["company"] else []
     live = any(c["app"].status in PROCESSING for c in cards)
     return page(request, "client/home.html", {**ctx, "nav": "home", "cards": cards, "counts": counts, "tab": tab,
@@ -106,10 +107,20 @@ def switch_company(request: Request, company_id: int = Form(...), db: Session = 
     return RedirectResponse("/cabinet", 303)
 
 
+def _company_page_ctx(request: Request, db: Session, user: User, **extra) -> dict:
+    ctx = _company_ctx(request, db, user)
+    team, me = [], None
+    if ctx["company"]:
+        team = db.scalars(select(CompanyMember).where(CompanyMember.company_id == ctx["company"].id)
+                          .order_by(CompanyMember.id)).all()
+        me = next((m for m in team if m.user_id == user.id), None)
+    return {**ctx, "nav": "company", "error": None, "inn": "", "invite_error": None, "team": team, "me": me,
+            **extra}
+
+
 @router.get("/company", response_class=HTMLResponse)
 def company_page(request: Request, db: Session = Depends(get_db), user: User = Depends(client_user)):
-    ctx = _company_ctx(request, db, user)
-    return page(request, "client/company.html", {**ctx, "nav": "company", "error": None, "inn": ""})
+    return page(request, "client/company.html", _company_page_ctx(request, db, user))
 
 
 @router.post("/company/add")
@@ -118,13 +129,32 @@ def company_add(request: Request, inn: str = Form(...), position: str = Form("П
     try:
         c = add_company_by_inn(db, user, inn, position)
     except DomainError as e:
-        ctx = _company_ctx(request, db, user)
-        return page(request, "client/company.html", {**ctx, "nav": "company", "error": e.message, "inn": inn},
+        db.rollback()
+        return page(request, "client/company.html", _company_page_ctx(request, db, user, error=e.message, inn=inn),
                     status_code=e.status_code)
     db.commit()
     request.session["company_id"] = c.id
     flash(request, f"Компания {c.name} добавлена. Данные взяты из ЕГРЮЛ (смоделировано).")
     return RedirectResponse("/cabinet", 303)
+
+
+@router.post("/company/invite")
+def company_invite(request: Request, email: str = Form(...), position: str = Form(""),
+                   can_sign: str | None = Form(None), db: Session = Depends(get_db),
+                   user: User = Depends(client_user)):
+    company, _ = active_company(request, db, user)
+    if company is None:
+        return RedirectResponse("/company", 303)
+    try:
+        m = invite_member(db, user, company.id, email=email, position=position.strip() or "Сотрудник",
+                          can_apply=True, can_sign=bool(can_sign))
+    except DomainError as e:
+        db.rollback()
+        return page(request, "client/company.html", _company_page_ctx(request, db, user, invite_error=e.message),
+                    status_code=e.status_code)
+    db.commit()
+    flash(request, f"{m.user.full_name} теперь в команде {company.name}")
+    return RedirectResponse("/company", 303)
 
 
 # --- Подбор ---------------------------------------------------------------------------
@@ -150,7 +180,7 @@ def podbor(request: Request, goal: str = "working", amount: str = "5 000 000", t
         guarantor = "1" if draft.has_guarantor else None
     params = _podbor_params(goal, amount, term, collateral, guarantor)
     matches = _matches(db, params, ctx["company"])
-    check = self_check(ctx["company"]) if ctx["company"] else None
+    check = self_check(db, ctx["company"]) if ctx["company"] else None
     return page(request, "client/podbor.html", {**ctx, "nav": "podbor", "p": params, "matches": matches,
                                                 "check": check, "terms": TERMS, "draft": draft})
 
