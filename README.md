@@ -15,7 +15,7 @@ MVP для хакатона «Альфа Будущее» (кейс Альфа-�
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 ![HTMX](https://img.shields.io/badge/HTMX-2-3366CC?logo=htmx&logoColor=white)
 ![Docker Compose](https://img.shields.io/badge/Docker%20Compose-одна%20команда-2496ED?logo=docker&logoColor=white)
-![Тесты](https://img.shields.io/badge/тесты-52%20pytest-2ea44f)
+![Тесты](https://img.shields.io/badge/тесты-53%20pytest-2ea44f)
 ![LLM](https://img.shields.io/badge/LLM-только%20открытые%20веса-8A2BE2)
 [![Данные](https://img.shields.io/badge/данные-синтетические-lightgrey)](THIRD_PARTY_NOTICES.md)
 
@@ -286,7 +286,7 @@ pytest                                   # SQLite в памяти, моки вн
 TEST_DATABASE_URL=postgresql+psycopg://kabinet:kabinet@localhost:5432/kabinet_test pytest   # на PostgreSQL
 ```
 
-**52 теста:** сценарии T1–T10, машина состояний, скоринг (включая пример из
+**53 теста:** сценарии T1–T10, машина состояний, скоринг (включая пример из
 макета: 55 + 33 − 25 = 63), валидация, снимки, CSRF, RBAC, сквозной путь через HTML,
 доступ к компаниям и право подписи, проверка шансов, пересказ LLM (фон, проверка ответа,
 недоступная модель), демо-данные.

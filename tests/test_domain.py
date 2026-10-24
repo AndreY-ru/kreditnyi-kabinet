@@ -9,7 +9,7 @@ from app.domain.states import TERMINAL, TRANSITIONS, Actor, S, can_transition
 from app.services.companies import inn_is_valid
 from app.services.credit_logic import annuity
 from app.services.scoring import DEFAULT_MODEL, ScoringInputs, score
-from tests.helpers import LIQUIDATING, SV, consent_all, draft, submit_and_process
+from tests.helpers import LIQUIDATING, SV, company_id, consent_all, draft, product_id, submit_and_process
 
 
 def test_terminal_states_have_no_exits():
@@ -124,3 +124,23 @@ def test_snapshot_is_immutable_record_with_hash(anna, db):
     assert len(snap.sha256) == 64 and snap.data["amount"] == 1_000_000
     r = anna.put(f"/api/applications/{app['id']}/financials", json={"revenue": 1})
     assert r.status_code == 409  # после отправки данные не меняются
+
+
+def test_new_draft_takes_financials_from_last_complete_application(anna):
+    """Незаполненный черновик не должен «затирать» подстановку: берём последнюю заявку с прибылью."""
+    draft(anna, SV, "WORKING", 1_000_000, 12)  # полные финансы и 2 обязательства
+    body = {"company_id": company_id(anna, SV), "product_id": product_id(anna, "OVERDRAFT"), "amount": 500_000,
+            "term_months": 6, "goal": "cash_gap"}
+    incomplete = anna.post("/api/applications", json=body).json()["id"]
+    anna.put(f"/api/applications/{incomplete}/financials", json={"ebit": None, "liabilities": []})
+
+    newest = anna.post("/api/applications", json=body).json()["id"]
+    r = anna.put(f"/api/applications/{newest}/financials", json={})  # ничего не меняем, смотрим подставленное
+    assert r.status_code == 200
+    from app import db as dbm
+    from app.models import Application
+
+    with dbm.SessionLocal() as s:
+        app = s.get(Application, newest)
+        assert app.financials.ebit == 6_200_000 and app.financials.revenue_trend == "GROWTH"
+        assert len(app.liabilities) == 2

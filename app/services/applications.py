@@ -83,6 +83,17 @@ def client_actor(user: User) -> ActorRef:
 
 # --- Черновик ---------------------------------------------------------------
 
+def last_complete_application(db: Session, company_id: int, exclude_id: int | None = None) -> Application | None:
+    """Последняя заявка компании с заполненными выручкой и прибылью. Незаконченный черновик пропускаем."""
+    stmt = (select(Application).join(FinancialIndicators)
+            .where(Application.company_id == company_id, FinancialIndicators.revenue.is_not(None),
+                   FinancialIndicators.ebit.is_not(None))
+            .order_by(Application.id.desc()))
+    if exclude_id is not None:
+        stmt = stmt.where(Application.id != exclude_id)
+    return db.scalar(stmt)
+
+
 def create_draft(
     db: Session, user: User, company: Company, product: Product, *,
     amount: int, term_months: int, goal: str, has_collateral: bool, has_guarantor: bool,
@@ -98,11 +109,8 @@ def create_draft(
     db.flush()
     app.number = f"KR-{date.today().year}-{app.id:04d}"
     fin = FinancialIndicators(application_id=app.id, employees=company.employees)
-    # Не заставляем вводить повторно: берём из «Прозрачного бизнеса» и прошлой заявки
-    prev = db.scalar(
-        select(Application).where(Application.company_id == company.id, Application.id != app.id)
-        .order_by(Application.id.desc())
-    )
+    # Не заставляем вводить повторно: берём из прошлой заявки, иначе — из «Прозрачного бизнеса»
+    prev = last_complete_application(db, company.id, exclude_id=app.id)
     if prev and prev.financials:
         pf = prev.financials
         fin.revenue, fin.expenses, fin.ebit = pf.revenue, pf.expenses, pf.ebit

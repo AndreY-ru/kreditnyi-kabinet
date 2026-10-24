@@ -9,11 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Application, Company, FinancialIndicators
+from app.models import Company
 from app.services import integrations
+from app.services.applications import last_complete_application
 from app.services.catalog import match_products
 from app.services.credit_logic import decide, max_affordable
 from app.services.explain import REASONS
@@ -56,10 +56,7 @@ def _declared_history(overdues: str, cfg: dict[str, Any]) -> list[dict[str, Any]
 
 def defaults(db: Session, company: Company) -> dict[str, Any]:
     """Подставляем то, что уже знаем: прошлая заявка с заполненными финансами, иначе «Прозрачный бизнес»."""
-    prev = db.scalar(select(Application).join(FinancialIndicators)
-                     .where(Application.company_id == company.id, FinancialIndicators.revenue.is_not(None),
-                            FinancialIndicators.ebit.is_not(None))
-                     .order_by(Application.id.desc()))
+    prev = last_complete_application(db, company.id)
     f = prev.financials if prev else None
     if prev and f:
         return {"revenue": f.revenue, "profit": f.ebit + (f.amortization or 0),
