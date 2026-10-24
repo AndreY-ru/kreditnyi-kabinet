@@ -1,0 +1,18 @@
+# Только для демонстрации: открыть моки ФНС и БКИ наружу, чтобы показать их API и Swagger.
+# По умолчанию они доступны только внутри сети Docker — так задумано (наружу открыт только сайт).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.mocks.yml up -d
+#
+#   http://localhost:8101/docs            — Swagger мока ФНС (ЕГРЮЛ/ЕГРИП и «Прозрачный бизнес»)
+#   http://localhost:8101/egrul/7701234560
+#   http://localhost:8101/transparent/5401987658
+#   http://localhost:8102/docs            — Swagger мока БКИ
+#   http://localhost:8102/report/5001777021?consent_id=1&purpose=demo   (без consent_id — 403)
+
+services:
+  fns-mock:
+    ports:
+      - "8101:8101"
+  bki-mock:
+    ports:
+      - "8102:8102"
