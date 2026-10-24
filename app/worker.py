@@ -75,34 +75,45 @@ def run_pending(db: Session, limit: int = 100) -> int:
 
 
 def expire_stale(db: Session) -> int:
-    """Истечение предложений и запросов данных (переходы в EXPIRED)."""
+    """Истечение предложений и запросов данных (переходы в EXPIRED).
+
+    Каждая заявка — своя транзакция: конфликт на одной (клиент как раз принимает предложение)
+    не откатывает уже истёкшие остальные.
+    """
     now = utcnow()
     n = 0
     system = ActorRef.system()
-    for offer in db.scalars(select(Offer).where(Offer.status == "ACTIVE", Offer.valid_until < now)).all():
+    offer_ids = db.scalars(select(Offer.id).where(Offer.status == "ACTIVE", Offer.valid_until < now)).all()
+    for oid in offer_ids:
+        offer = db.get(Offer, oid)
+        if offer is None or offer.status != "ACTIVE":
+            continue
         app = db.get(Application, offer.application_id)
-        offer.status = "EXPIRED"
-        if app and app.status in OFFER_STATES:
-            try:
+        try:
+            offer.status = "EXPIRED"
+            if app and app.status in OFFER_STATES:
                 transition(db, app, S.EXPIRED, event="Срок предложения истёк", actor=system)
                 n += 1
-            except DomainError:
-                db.rollback()
-                continue
-    for req in db.scalars(select(InfoRequest).where(InfoRequest.status == "OPEN", InfoRequest.due_at < now)).all():
+            db.commit()
+        except DomainError:
+            db.rollback()
+    req_ids = db.scalars(select(InfoRequest.id).where(InfoRequest.status == "OPEN", InfoRequest.due_at < now)).all()
+    for rid in req_ids:
+        req = db.get(InfoRequest, rid)
+        if req is None or req.status != "OPEN":
+            continue
         app = db.get(Application, req.application_id)
-        req.status = "EXPIRED"
-        if app and app.status == S.NEEDS_INFO:
-            try:
+        try:
+            req.status = "EXPIRED"
+            if app and app.status == S.NEEDS_INFO:
                 transition(db, app, S.EXPIRED, event="Срок ответа истёк", actor=system)
                 for t in db.scalars(select(ReviewTask).where(ReviewTask.application_id == app.id,
                                                              ReviewTask.closed_at.is_(None))):
                     t.closed_at = now
                 n += 1
-            except DomainError:
-                db.rollback()
-                continue
-    db.commit()
+            db.commit()
+        except DomainError:
+            db.rollback()
     return n
 
 
