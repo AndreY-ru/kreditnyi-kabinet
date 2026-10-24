@@ -18,6 +18,7 @@ from app.db import SessionLocal, get_engine
 from app.domain.states import OFFER_STATES, S
 from app.domain.transitions import ActorRef, DomainError, transition
 from app.models import Application, InfoRequest, Job, Offer, ReviewTask, utcnow
+from app.services.explain import REPHRASE_JOB, rephrase_decision
 from app.services.pipeline import process_application
 
 log = logging.getLogger("worker")
@@ -42,6 +43,10 @@ def run_job(db: Session, job: Job) -> None:
     try:
         if job.kind == "PROCESS_APPLICATION":
             process_application(db, job.application_id)
+        elif job.kind == REPHRASE_JOB:
+            rephrase_decision(db, job.application_id)  # LLMUnavailable → повтор с паузой, потом остаётся шаблон
+        else:
+            log.warning("Неизвестный тип задачи %s, пропускаем", job.kind)
         job = db.get(Job, job.id)  # type: ignore[assignment]
         job.status = "DONE"
         job.updated_at = utcnow()

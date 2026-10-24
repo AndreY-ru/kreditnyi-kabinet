@@ -30,7 +30,7 @@ from app.services import integrations
 from app.services.catalog import alternatives_for
 from app.services.companies import apply_egrul
 from app.services.credit_logic import decide
-from app.services.explain import explain
+from app.services.explain import enqueue_rephrase, explain
 from app.services.scoring import DEFAULT_MODEL, ScoringInputs, score
 from app.services.validation import active_consent, validate
 
@@ -212,6 +212,7 @@ def _score_and_decide(db: Session, app: Application) -> None:
                         conditions=conditions, explanation=text, explanation_source=src))
         reason = "; ".join(k["label"] for k in out.knockouts) or f"Оценка {out.score} ниже порога"
         transition(db, app, S.DECLINED, event="Решение системы", actor=SYSTEM, reason=reason)
+        enqueue_rephrase(db, app.id, "DECLINED")
         return
 
     if result.status == "APPROVED_AUTO":
