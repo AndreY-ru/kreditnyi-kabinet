@@ -55,7 +55,8 @@
 </div>
 {% endfor %}
 </div>
-<p class="small muted">Это подсказка, а не решение банка. Кредитную историю запросим только после вашего согласия.</p>
+<div class="between" style="gap:8px 16px"><p class="small muted" style="flex:1 1 280px">Это подсказка, а не решение банка. Кредитную историю запросим только после вашего согласия.</p>
+<a href="/check?goal={{ p.goal }}&amount={{ p.amount }}&term={{ p.term }}{% if p.collateral %}&collateral=1{% endif %}{% if p.guarantor %}&guarantor=1{% endif %}" class="btn">Оценить шансы с этой суммой</a></div>
 </section>
 {% endif %}
 <div id="results" class="stack">

@@ -1,0 +1,52 @@
+{% from "macros.html" import icon %}
+{% if not r.ready %}
+<section class="card"><span class="h3">Укажите сумму, выручку и прибыль — и мы оценим шансы</span></section>
+{% else %}
+{% set lv = {'high': ('Шансы высокие', 'green', 'Скорее всего, заявку одобрят на этих условиях.'),
+             'medium': ('Шансы средние', 'amber', 'Заявку, вероятно, рассмотрит специалист. Её можно усилить — советы ниже.'),
+             'low': ('Шансы низкие', 'red', 'С такими параметрами вероятен отказ. Посмотрите, что можно изменить.')}[r.level] %}
+<section class="card lg" aria-labelledby="lv-h" aria-live="polite" style="gap:18px">
+<div class="between"><h2 id="lv-h" class="h-xl">{{ lv[0] }}</h2><span class="pill {{ lv[1] }}">Предварительная оценка</span></div>
+<p class="ink2" style="margin:0">{{ lv[2] }} Кредитную историю считаем с ваших слов: в бюро банк обратится только после вашего согласия.</p>
+<div class="grid2">
+{% for it in r["items"] %}
+<div class="check {% if it.tone == 'warn' %}warn{% elif it.tone == 'bad' %}bad{% endif %}">
+{% if it.tone == 'ok' %}<span class="dot-ic ok">{{ icon('check') }}</span>{% elif it.tone == 'warn' %}<span class="dot-ic warn">{{ icon('excl') }}</span>{% elif it.tone == 'bad' %}<span class="dot-ic bad">{{ icon('x') }}</span>{% else %}<span class="dot-ic na">{{ icon('clock', 14) }}</span>{% endif %}
+<div class="stack-xs" style="gap:0"><span class="t">{{ it.title }}</span><span class="small muted">{{ it.text }}</span></div>
+</div>
+{% endfor %}
+</div>
+</section>
+
+{% if r.tips %}
+<section class="card" aria-labelledby="tips-h" style="gap:10px">
+<h2 id="tips-h" class="h3">Что улучшит шансы</h2>
+<ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;color:var(--ink2)">
+{% for t in r.tips %}<li>{{ t }}</li>{% endfor %}
+</ul>
+</section>
+{% endif %}
+
+<h2 class="h2" style="margin-top:8px">Что будет по продуктам</h2>
+{% for x in r.products %}
+{% set pr = x.product %}{% set vd = r.verdicts[x.verdict] %}
+<article class="card" style="gap:12px">
+<div class="between"><h3 class="h3" style="font-size:18px">{{ pr.name }}</h3><span class="pill sm {{ vd[1] }}">{{ vd[0] }}</span></div>
+{% if x.notes %}<ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px;color:var(--ink2)">{% for n in x.notes %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
+{% if x.verdict in ('auto', 'review') %}
+<form method="post" action="/applications/new" class="inline">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<input type="hidden" name="product_id" value="{{ pr.id }}">
+<input type="hidden" name="goal" value="{{ p.goal }}">
+<input type="hidden" name="amount" value="{{ p.amount }}">
+<input type="hidden" name="term" value="{{ p.term }}">
+{% if p.has_collateral %}<input type="hidden" name="collateral" value="1">{% endif %}
+{% if p.has_guarantor %}<input type="hidden" name="guarantor" value="1">{% endif %}
+<button type="submit" class="btn {% if loop.first %}primary{% endif %}">Оформить заявку</button>
+<span class="small muted">до {{ pr.max_amount|mln }}, от {{ pr.base_rate|rate }}%*</span>
+</form>
+{% endif %}
+</article>
+{% endfor %}
+<p class="xs muted">* Модель, ставки и лимиты синтетические. Предварительная оценка — не решение банка и не оферта.</p>
+{% endif %}

@@ -98,6 +98,41 @@ class SelfCheckItem(BaseModel):
     text: str
 
 
+class PrecheckIn(BaseModel):
+    goal: Goal = "working"
+    amount: int = Field(gt=0)
+    term_months: int = Field(gt=0, le=120)
+    has_collateral: bool = False
+    has_guarantor: bool = True
+    revenue: int | None = Field(default=None, ge=0, description="Не указано — подставим из прошлой заявки или ФНС")
+    profit: int | None = Field(default=None, description="Прибыль до процентов и налогов, примерно")
+    debt: int | None = Field(default=None, ge=0, description="Остаток по действующим кредитам и лизингу")
+    revenue_trend: Trend | None = None
+    overdues: Literal["none", "minor", "current"] = Field(
+        default="none", description="Просрочки за 2 года со слов клиента; в БКИ до согласия не ходим")
+
+
+class PrecheckFactor(BaseModel):
+    title: str
+    tone: Literal["ok", "warn", "bad", "na"]
+    text: str
+
+
+class PrecheckProduct(BaseModel):
+    product_id: int
+    name: str
+    verdict: Literal["auto", "review", "low", "unfit"]
+    notes: list[str]
+
+
+class PrecheckOut(BaseModel):
+    level: Literal["high", "medium", "low"]
+    factors: list[PrecheckFactor]
+    products: list[PrecheckProduct]
+    tips: list[str]
+    comfortable_amount: int | None
+
+
 class MemberIn(BaseModel):
     email: str
     position: str = "Сотрудник"

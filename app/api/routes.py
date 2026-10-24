@@ -11,6 +11,7 @@ from app.models import Application, AuditLog, Company, CompanyMember, Product, S
 from app.security import admin_user, bank_user, client_user, current_user, verify_password
 from app.services import analyst as analyst_svc
 from app.services import applications as svc
+from app.services import precheck
 from app.services.catalog import match_products
 from app.services.companies import add_company_by_inn, invite_member, require_member, self_check, user_companies
 from app.services.views import application_view, history_rows, label
@@ -98,6 +99,27 @@ def add_company(body: s.CompanyIn, db: Session = Depends(get_db), user: User = D
 def company_self_check(company_id: int, db: Session = Depends(get_db), user: User = Depends(client_user)):
     require_member(db, user, company_id)
     return self_check(db, db.get(Company, company_id))["items"]
+
+
+@router.post("/companies/{company_id}/precheck", response_model=s.PrecheckOut, tags=["companies"])
+def company_precheck(company_id: int, body: s.PrecheckIn, db: Session = Depends(get_db),
+                     user: User = Depends(client_user)):
+    """Шансы до подачи: та же модель, что в конвейере, но без БКИ и без записи в БД. Баллы и пороги не раскрываются."""
+    require_member(db, user, company_id)
+    company = db.get(Company, company_id)
+    d = precheck.defaults(db, company)
+    p = precheck.PrecheckParams(
+        goal=body.goal, amount=body.amount, term=body.term_months, has_collateral=body.has_collateral,
+        has_guarantor=body.has_guarantor, revenue=body.revenue if body.revenue is not None else d["revenue"],
+        profit=body.profit if body.profit is not None else d["profit"],
+        debt=body.debt if body.debt is not None else d["debt"], trend=body.revenue_trend or d["trend"],
+        overdues=body.overdues)
+    r = precheck.run(db, company, p)
+    if not r["ready"]:
+        raise HTTPException(422, "Нужны сумма, выручка и прибыль")
+    return s.PrecheckOut(level=r["level"], factors=r["items"], tips=r["tips"], comfortable_amount=r["cap"],
+                         products=[s.PrecheckProduct(product_id=x["product"].id, name=x["product"].name,
+                                                     verdict=x["verdict"], notes=x["notes"]) for x in r["products"]])
 
 
 @router.get("/companies/{company_id}/members", response_model=list[s.MemberOut], tags=["companies"])

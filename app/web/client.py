@@ -15,6 +15,7 @@ from app.domain.transitions import DomainError, ValidationFailed
 from app.models import Application, Company, CompanyMember, Product, User, utcnow
 from app.security import client_user, verify_csrf
 from app.services import applications as svc
+from app.services import precheck
 from app.services.catalog import GOALS, TERMS, match_products
 from app.services.companies import add_company_by_inn, invite_member, require_member, self_check
 from app.services.validation import active_consent, validate
@@ -222,6 +223,55 @@ def new_application(request: Request, product_id: int = Form(...), goal: str = F
                                has_collateral=p["collateral"], has_guarantor=p["guarantor"])
     db.commit()
     return RedirectResponse(f"/applications/{app.id}/edit", 303)
+
+
+# --- Проверка шансов до подачи ----------------------------------------------------------------
+
+TRENDS = {"GROWTH": "Выросла", "FLAT": "Почти не изменилась", "DECLINE": "Снизилась"}
+
+
+def _check_params(q, defaults: dict | None = None) -> precheck.PrecheckParams:
+    """Параметры из формы. Финансов нет в запросе — берём подставленные (прошлая заявка или ФНС)."""
+    d = defaults or {}
+
+    def money(name: str, signed: bool = False) -> int | None:
+        return parse_money(q[name], signed=signed) if name in q else d.get(name)
+
+    goal, trend, term = q.get("goal"), q.get("trend") or d.get("trend"), str(q.get("term") or "")
+    overdues = q.get("overdues")
+    return precheck.PrecheckParams(
+        goal=goal if goal in GOALS else "working", amount=parse_money(q.get("amount") or "") or 0,
+        term=int(term) if term.isdigit() else 12,
+        has_collateral=bool(q.get("collateral")), has_guarantor=bool(q.get("guarantor")),
+        revenue=money("revenue"), profit=money("profit", signed=True), debt=money("debt") or 0,
+        trend=trend if trend in TRENDS else "FLAT",
+        overdues=overdues if overdues in precheck.OVERDUES else "none",
+    )
+
+
+@router.get("/check", response_class=HTMLResponse)
+def check_page(request: Request, db: Session = Depends(get_db), user: User = Depends(client_user)):
+    ctx = _company_ctx(request, db, user)
+    company = ctx["company"]
+    if company is None:
+        return RedirectResponse("/company", 303)
+    q = dict(request.query_params)
+    if "amount" not in q:  # первый заход: разумные значения по умолчанию
+        q.update(amount="3 000 000", term="12", guarantor="1")
+    d = precheck.defaults(db, company)
+    p = _check_params(q, d)
+    return page(request, "client/check.html", {**ctx, "nav": "check", "p": p, "terms": TERMS, "trends": TRENDS,
+                                               "overdues": precheck.OVERDUES, "source": d.get("source"),
+                                               "r": precheck.run(db, company, p)})
+
+
+@router.get("/check/results", response_class=HTMLResponse)
+def check_results(request: Request, db: Session = Depends(get_db), user: User = Depends(client_user)):
+    company, _ = active_company(request, db, user)
+    if company is None:
+        return HTMLResponse("")
+    p = _check_params(request.query_params)
+    return partial(request, "partials/check_results.html", {"p": p, "r": precheck.run(db, company, p)})
 
 
 # --- Заявка: компания и финансы ------------------------------------------------------------
