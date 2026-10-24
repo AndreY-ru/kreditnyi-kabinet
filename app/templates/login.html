@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Вход · Кредитный кабинет{% endblock %}
+{% block body %}
+<main class="login">
+<div class="card lg">
+<div class="inline"><span class="logo-mark">К</span><span class="logo-text">Кредитный кабинет</span><span class="demo-badge">Демо-данные</span></div>
+<h1 class="h2">Вход</h1>
+{% if error %}<div class="flash err" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/login" class="stack">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<input type="hidden" name="next" value="{{ next }}">
+<div class="field"><label for="email">Email</label><input class="txt" id="email" name="email" type="email" autocomplete="username" value="{{ email }}" required></div>
+<div class="field"><label for="password">Пароль</label><input class="txt" id="password" name="password" type="password" autocomplete="current-password" required></div>
+<button class="btn primary lg" type="submit">Войти</button>
+</form>
+<div class="stack-sm">
+<span class="lbl">Демо-пользователи <span class="muted small">· пароль у всех: demo</span></span>
+<div class="demo-users">
+{% for email, name, role in demo_users %}
+<form method="post" action="/login">
+<input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="next" value="{{ next }}">
+<input type="hidden" name="email" value="{{ email }}"><input type="hidden" name="password" value="demo">
+<button type="submit" style="width:100%"><span class="stack-xs" style="gap:0"><span class="m">{{ name }}</span><span class="small muted">{{ role }}</span></span><span class="small muted">{{ email }}</span></button>
+</form>
+{% endfor %}
+</div>
+</div>
+<p class="xs muted">Все компании, люди и ответы ФНС/БКИ в демо синтетические и смоделированы.</p>
+</div>
+</main>
+{% endblock %}

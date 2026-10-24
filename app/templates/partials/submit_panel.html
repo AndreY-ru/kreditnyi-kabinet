@@ -1,0 +1,16 @@
+<div id="submit-panel" class="stack">
+{% if ready %}
+<form method="post" action="/applications/{{ app.id }}/submit">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<input type="hidden" name="idem" value="{{ idem }}">
+<button type="submit" class="btn primary xl" onclick="this.disabled=true;this.form.submit()">Отправить заявку</button>
+</form>
+{% else %}
+<button type="button" disabled aria-describedby="why-disabled" class="btn xl">Отправить заявку</button>
+<p id="why-disabled" class="small" style="color:var(--red)">
+{% if other_errors %}В заявке есть незаполненные поля: {% for e in other_errors %}{{ e.message|lower }}{% if not loop.last %}; {% endif %}{% endfor %}. <a href="/applications/{{ app.id }}/edit?check=1">Исправить</a>
+{% else %}Отметьте все согласия — без них банк не сможет рассмотреть заявку.{% endif %}
+</p>
+{% endif %}
+<span class="small muted" style="text-align:center">Подтверждение простой электронной подписью · смоделировано</span>
+</div>

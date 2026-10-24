@@ -1,0 +1,48 @@
+{% extends "bank/base.html" %}
+{% block title %}Продукты и скоринг · Кредитный конвейер{% endblock %}
+{% block main %}
+<div class="between end"><h1 class="h1">Продукты и скоринг</h1><span class="small muted">Каталог и параметры синтетические, не откалиброваны</span></div>
+<section class="card flat" aria-labelledby="pr-h">
+<div style="padding:16px 20px;border-bottom:1px solid var(--line)" class="between"><h2 id="pr-h" class="h3">Каталог продуктов</h2>
+{% if user.role != 'ADMIN' %}<span class="small muted">Изменять может администратор</span>{% endif %}</div>
+<div class="tbl-wrap"><table class="queue" style="min-width:1000px">
+<thead><tr><th scope="col">Продукт</th><th scope="col">Сумма</th><th scope="col">Срок</th><th scope="col">Мин. срок бизнеса</th><th scope="col">Обеспечение</th><th scope="col">Базовая ставка, %</th><th scope="col">Авто-лимит, ₽</th><th scope="col">Активен</th><th scope="col"><span class="sr">Сохранить</span></th></tr></thead>
+<tbody>
+{% for p in products %}
+<tr>
+<td><div class="cell2"><span class="m">{{ p.name }}</span><span class="s">{{ p.code }} · v{{ p.version }}{% if p.gov_support %} · господдержка{% endif %}</span></div></td>
+<td>{{ p.min_amount|mln }}–{{ p.max_amount|mln }}</td>
+<td>{{ p.min_term }}–{{ p.max_term }} мес.</td>
+<td>{{ p.min_business_months }} мес.</td>
+<td>{% if p.requires_collateral %}Залог{% elif p.unsecured_max %}Без залога до {{ p.unsecured_max|mln }}{% else %}Не нужен{% endif %}{% if p.requires_guarantor %}, поручитель{% endif %}</td>
+{% if user.role == 'ADMIN' %}
+<td colspan="4">
+<form method="post" action="/bank/settings/products/{{ p.id }}" class="inline" style="gap:8px">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<label class="sr" for="r{{ p.id }}">Базовая ставка</label><input id="r{{ p.id }}" name="base_rate" class="txt sm" style="width:80px" value="{{ p.base_rate|rate }}">
+<label class="sr" for="a{{ p.id }}">Авто-лимит</label><input id="a{{ p.id }}" name="auto_limit" class="txt sm" style="width:130px" data-money value="{{ p.auto_limit|money_input }}">
+<label class="cb" style="align-items:center"><input type="checkbox" name="active" value="1" {% if p.active %}checked{% endif %} style="margin:0"><span class="sr">Активен</span></label>
+<button class="btn" type="submit" style="min-height:40px">Сохранить</button>
+</form>
+</td>
+{% else %}
+<td>{{ p.base_rate|rate }}</td><td>{{ p.auto_limit|money if p.auto_limit else 'только вручную' }}</td><td>{{ 'да' if p.active else 'нет' }}</td><td></td>
+{% endif %}
+</tr>
+{% endfor %}
+</tbody></table></div>
+</section>
+
+<section class="card" aria-labelledby="sm-h">
+<div class="between"><h2 id="sm-h" class="h3">Скоринговая карта {{ cfg.version }}</h2><span class="small muted">Новая версия — через API: POST /api/admin/scoring-models</span></div>
+<div class="grid3">
+<div class="panel stack-xs"><span class="m">База и зоны</span><span class="small">База {{ cfg.base }} · отказ &lt; {{ cfg.zones.decline_below }} · авто ≥ {{ cfg.zones.auto_from }}</span></div>
+<div class="panel stack-xs"><span class="m">Долговая нагрузка</span><span class="small">{% for u, pts in cfg.debt_load %}{% if u %}&lt; {{ u }}×: {{ pts }}{% else %}иначе: {{ pts }}{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</span></div>
+<div class="panel stack-xs"><span class="m">Срок бизнеса, мес.</span><span class="small">{% for u, pts in cfg.business_age %}{% if u %}&lt; {{ u }}: {{ pts }}{% else %}иначе: +{{ pts }}{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</span></div>
+<div class="panel stack-xs"><span class="m">Запрос к выручке</span><span class="small">{% for u, pts in cfg.request_to_revenue %}{% if u %}&lt; {{ (u * 100)|int }}%: {{ pts }}{% else %}иначе: {{ pts }}{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</span></div>
+<div class="panel stack-xs"><span class="m">Платёжная дисциплина</span><span class="small">Без просрочек +{{ cfg.payment_discipline.clean }} · мелкие {{ cfg.payment_discipline.minor }} · серьёзные {{ cfg.payment_discipline.major }}</span></div>
+<div class="panel stack-xs"><span class="m">Прочее</span><span class="small">Залог +{{ cfg.collateral }} · поручитель +{{ cfg.guarantor }} · рост выручки +{{ cfg.revenue_trend.GROWTH }} · снижение {{ cfg.revenue_trend.DECLINE }}</span></div>
+</div>
+<p class="small muted">Версии: {% for mdl in models %}{{ mdl.version }}{% if mdl.active %} (активна){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}. Версия модели сохраняется вместе с каждым результатом скоринга.</p>
+</section>
+{% endblock %}

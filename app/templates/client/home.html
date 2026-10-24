@@ -1,0 +1,74 @@
+{% extends "client/base.html" %}
+{% from "macros.html" import icon %}
+{% block title %}Мои заявки · Кредитный кабинет{% endblock %}
+{% block main %}
+<div class="between end">
+<div class="stack-xs">
+<h1 class="h1">Добрый день, {{ user.first_name }}</h1>
+{% if member %}<p class="muted">{{ member.position }}{% if member.can_apply %} · может оформлять заявки от имени компании{% endif %}</p>{% endif %}
+</div>
+<a href="/podbor" class="btn primary lg">{{ icon('plus', 18, 2.2) }}Подобрать кредит</a>
+</div>
+
+{% if not company %}
+<section class="alert blue">
+<span class="ic">{{ icon('info', 22, 2) }}</span>
+<div class="txt"><strong class="h3">Добавьте компанию</strong><span>Введите ИНН — данные подставим из реестра.</span></div>
+<a class="btn dark" href="/company">Добавить по ИНН</a>
+</section>
+{% endif %}
+
+{% for c in attention %}
+<section aria-label="Требуется действие" class="alert">
+<span class="ic">{{ icon('warn', 22, 2) }}</span>
+<div class="txt">
+{% if c.app.status == 'NEEDS_INFO' and c.info %}
+<strong class="h3" style="font-size:16px">Банку нужны данные по заявке {{ c.app.number }}</strong>
+<span>{{ c.info.doc_kind }}. Ответьте до {{ c.info.due_at|ddate }}, иначе заявка закроется.</span>
+{% else %}
+<strong class="h3" style="font-size:16px">Исправьте данные в заявке {{ c.app.number }}</strong>
+<span>При проверке нашли ошибки — исправьте и отправьте заявку снова.</span>
+{% endif %}
+</div>
+<a href="{% if c.app.status == 'NEEDS_INFO' %}/applications/{{ c.app.id }}{% else %}/applications/{{ c.app.id }}/edit?check=1{% endif %}" class="btn dark">{% if c.app.status == 'NEEDS_INFO' %}Дополнить заявку{% else %}Исправить{% endif %}</a>
+</section>
+{% endfor %}
+
+<div class="row">
+<div style="flex: 999 1 640px; min-width: 0">
+{% include "partials/app_list.html" %}
+</div>
+
+<aside class="col-side" style="flex: 1 1 320px">
+{% if company %}
+<section aria-labelledby="co-h" class="card">
+<div class="between"><h2 id="co-h" class="h3">Компания</h2>
+<span class="pill sm {% if company.status == 'ACTIVE' %}green{% else %}red{% endif %}">{% if company.status == 'ACTIVE' %}Действует{% else %}Ликвидация / реорганизация{% endif %}</span></div>
+<dl class="facts">
+<div><dt>{% if company.kind == 'IP' %}ОГРНИП{% else %}ОГРН{% endif %}</dt><dd>{{ company.ogrn or '—' }}</dd></div>
+<div><dt>Регистрация</dt><dd>{{ company.registered_at|ddate }} · {{ company.registered_at|years_since }}</dd></div>
+<div><dt>ОКВЭД</dt><dd>{{ company.okved }}<span class="small muted" style="display:block;font-weight:400">{{ company.okved_name or '' }}</span></dd></div>
+<div><dt>Сотрудников</dt><dd>{{ company.employees or '—' }}</dd></div>
+</dl>
+<p class="xs muted">Источник: ЕГРЮЛ (смоделировано), обновлено {{ company.egrul_fetched_at|ddate }}</p>
+</section>
+
+<section aria-labelledby="team-h" class="card">
+<h2 id="team-h" class="h3">Кто работает с заявками</h2>
+{% for m in team %}
+<div class="member">
+<span class="avatar sm {% if m.user_id != user.id %}light{% endif %}" aria-hidden="true">{{ m.user.initials }}</span>
+<div class="who"><span class="m">{{ m.user.full_name }}{% if m.user_id == user.id %} (вы){% endif %}</span><span class="small muted">{{ m.position }}{% if m.can_sign %} · подписывает договоры{% elif m.can_apply %} · готовит заявки{% endif %}</span></div>
+</div>
+{% endfor %}
+</section>
+{% endif %}
+
+<section aria-labelledby="check-h" class="card dark" style="gap:10px">
+<h2 id="check-h" class="h3">Проверьте шансы до подачи</h2>
+<p class="small">Сверим компанию с самыми частыми причинами отказа: срок работы, налоговая задолженность, просрочки. Займёт 2 минуты и не попадёт в кредитную историю.</p>
+<a href="/podbor#self-check" class="btn light self-start">Пройти самопроверку</a>
+</section>
+</aside>
+</div>
+{% endblock %}

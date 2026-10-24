@@ -1,0 +1,241 @@
+{% extends "client/base.html" %}
+{% from "macros.html" import icon, pill %}
+{% block title %}Заявка {{ app.number }} · Кредитный кабинет{% endblock %}
+{% block main %}
+{% set offer = v.offer %}
+{% set d = v.decision %}
+<div class="between end">
+<div class="stack-xs" style="gap:6px">
+<a href="/cabinet" style="font-size:14px;text-decoration:none">← Мои заявки</a>
+<div class="inline"><h1 class="h1">Заявка {{ app.number }}</h1>{{ pill(v.label) }}</div>
+<span class="muted">{{ app.product.name }} · запрошено {{ app.amount|money }} на {{ app.term_months }} мес. · цель: {{ GOAL_PURPOSE.get(app.goal, app.goal) }}{% if app.submitted_at %} · отправлена {{ app.submitted_at|dt('%d.%m.%Y в %H:%M') }}{% endif %}</span>
+</div>
+{% if app.status in ('NEEDS_CORRECTION', 'NEEDS_INFO') %}
+<form method="post" action="/applications/{{ app.id }}/withdraw" onsubmit="return confirm('Отозвать заявку? Это действие нельзя отменить.')">
+<input type="hidden" name="csrf_token" value="{{ csrf }}"><button type="submit" class="btn" style="font-weight:500">Отозвать заявку</button></form>
+{% endif %}
+</div>
+
+{% if app.status not in ('WITHDRAWN',) %}{% include "partials/stages.html" %}{% endif %}
+
+<div class="row">
+<div class="col-main">
+
+{# ---------- В обработке ---------- #}
+{% if app.status in ('SUBMITTED', 'VALIDATING', 'ENRICHING', 'SCORING') %}
+<section class="card lg" aria-live="polite">
+<div class="inline"><span class="spinner" aria-hidden="true"></span><h2 class="h-lg">
+{% if app.status in ('SUBMITTED', 'VALIDATING') %}Проверяем данные заявки{% elif app.status == 'ENRICHING' %}Запрашиваем ФНС и бюро кредитных историй{% else %}Оцениваем заявку{% endif %}</h2></div>
+<p class="ink2">Страница обновится сама. Можно закрыть её — статус сохранится в «Моих заявках».</p>
+</section>
+{% endif %}
+
+{# ---------- Нужно исправить ---------- #}
+{% if app.status == 'NEEDS_CORRECTION' %}
+<section class="card lg warn">
+<h2 class="h-lg">Нужно исправить данные</h2>
+<ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+{% for e in app.validation_errors or [] %}<li>{{ e.message }}</li>{% endfor %}
+</ul>
+<a href="/applications/{{ app.id }}/edit?check=1" class="btn primary lg self-start">Исправить и отправить снова</a>
+</section>
+{% endif %}
+
+{# ---------- На рассмотрении ---------- #}
+{% if app.status == 'MANUAL_REVIEW' %}
+<section class="card lg">
+<h2 class="h-lg">Заявку рассматривает специалист</h2>
+<p class="ink2">Решение появится здесь, обычно в течение {{ app.product.decision_days }} рабочих дней. Если понадобятся документы, мы напишем об этом на этой странице и в «Моих заявках».</p>
+</section>
+{% endif %}
+
+{# ---------- Запрос данных ---------- #}
+{% if app.status == 'NEEDS_INFO' and v.info %}
+{% set dl = days_left(v.info.due_at) %}
+<section aria-labelledby="req-h" class="card lg warn">
+<div class="between" style="align-items:flex-start">
+<div class="stack-xs"><h2 id="req-h" class="h-lg">Что нужно сделать</h2><span class="muted">Запрос специалиста банка от {{ v.info.created_at|dt('%d.%m в %H:%M') }}</span></div>
+<span class="pill amber" style="border-radius:10px">До {{ v.info.due_at|dt('%d.%m') }} · осталось {{ dl }} {{ plural(dl, 'день', 'дня', 'дней') }}</span>
+</div>
+<div class="panel stack-sm" style="gap:10px;padding:18px">
+<span class="small muted">Документ</span>
+<strong class="h3">{{ v.info.doc_kind }}</strong>
+{% if v.info.comment %}<span class="small muted">Комментарий специалиста</span><p>{{ v.info.comment }}</p>{% endif %}
+</div>
+<form method="post" action="/applications/{{ app.id }}/info" enctype="multipart/form-data" class="stack" style="gap:20px">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<div class="drop" data-drop="file-list">
+<span style="color:var(--ink2)">{{ icon('upload', 32, 1.8) }}</span>
+<span class="m">Перетащите файл сюда</span>
+<span class="small muted">PDF, XLSX или изображение до 20 МБ</span>
+<label class="btn" style="cursor:pointer">Выбрать файл<input type="file" name="files" multiple class="sr" accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.docx,.doc,.txt"></label>
+</div>
+<div id="file-list" class="stack-sm"></div>
+<div class="field"><label for="note">Комментарий для банка <span class="muted" style="font-weight:400">— необязательно</span></label>
+<textarea id="note" name="comment" rows="3" class="txt"></textarea></div>
+<div class="inline"><button type="submit" class="btn primary lg">Отправить ответ</button><span class="small muted">Заявка вернётся к специалисту сразу после отправки</span></div>
+</form>
+</section>
+{% endif %}
+
+{# ---------- Одобрено ---------- #}
+{% if app.status in ('APPROVED_AUTO', 'APPROVED') and offer %}
+<section aria-labelledby="ap-h" class="card lg">
+<div class="stack-xs" style="gap:6px"><h2 id="ap-h" class="h-xl">Кредит одобрен на запрошенных условиях</h2><span class="muted">Предложение действует до {{ offer.valid_until|ddate }}</span></div>
+<div class="offer-box green" style="flex:none">
+<span class="big-sum">{{ offer.amount|money }}</span>
+<div class="grid3">
+<div class="stack-xs" style="gap:0"><span class="xs muted">Срок</span><span class="b">{{ offer.term_months }} мес.</span></div>
+<div class="stack-xs" style="gap:0"><span class="xs muted">Ставка</span><span class="b">{{ offer.rate|rate }}% годовых</span></div>
+<div class="stack-xs" style="gap:0"><span class="xs muted">Платёж в месяц</span><span class="b">≈ {{ offer.monthly_payment|money }}</span></div>
+</div>
+</div>
+{% if v.positives %}<p class="small ink2">Помогло: {{ v.positives|join(', ')|lower }}.</p>{% endif %}
+{% include "partials/offer_actions.html" %}
+</section>
+{% endif %}
+
+{# ---------- Встречное предложение ---------- #}
+{% if app.status == 'COUNTEROFFER' and offer %}
+<section aria-labelledby="co-h" class="card lg" style="gap:22px">
+<div class="stack-xs" style="gap:6px"><h2 id="co-h" class="h-xl">Банк готов выдать кредит на других условиях</h2><span class="muted">Предложение действует до {{ offer.valid_until|ddate }}</span></div>
+<div class="inline" style="align-items:stretch;gap:16px">
+<div class="offer-req"><span class="small muted">Вы запросили</span><span class="x">{{ app.amount|money }}</span><span class="muted">{{ app.term_months }} месяцев</span></div>
+<div class="offer-box"><span class="small b" style="color:var(--blue)">Мы предлагаем</span><span class="big-sum">{{ offer.amount|money }}</span>
+<div class="grid3">
+<div class="stack-xs" style="gap:0"><span class="xs muted">Срок</span><span class="b">{{ offer.term_months }} мес.</span></div>
+<div class="stack-xs" style="gap:0"><span class="xs muted">Ставка</span><span class="b">{{ offer.rate|rate }}% годовых</span></div>
+<div class="stack-xs" style="gap:0"><span class="xs muted">Платёж в месяц</span><span class="b">≈ {{ offer.monthly_payment|money }}</span></div>
+</div></div>
+</div>
+<div class="stack-sm" style="gap:12px">
+<h3 class="h3">Что повлияло на условия</h3>
+{% for r in v.reasons %}
+<div class="reason amber"><span class="dot-ic warn">{{ icon('excl') }}</span><div class="stack-xs" style="gap:0"><span class="t">{{ r.title }}</span><span class="s">{{ r.text }}</span></div></div>
+{% endfor %}
+{% if v.positives %}
+<div class="reason"><span class="dot-ic ok">{{ icon('check') }}</span><div class="stack-xs" style="gap:0"><span class="t">{{ v.positives|join(', ')|lower|capitalize }}</span><span class="s">Без замечаний — это помогло получить предложение.</span></div></div>
+{% endif %}
+</div>
+{% if v.reasons %}
+<div class="stack-sm" style="gap:10px">
+<h3 class="h3">Как получить исходную сумму</h3>
+<ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;color:var(--ink2)">
+{% for r in v.reasons %}<li>{{ r.action }}</li>{% endfor %}
+<li>Возьмите {{ offer.amount|mln }} сейчас и попросите увеличить сумму после 6 месяцев платежей без просрочек</li>
+</ul>
+</div>
+{% endif %}
+{% if d and d.explanation_source == 'LLM' %}<p class="small panel">{{ d.explanation }} <span class="muted">· пересказано моделью с открытыми весами</span></p>{% endif %}
+{% include "partials/offer_actions.html" %}
+</section>
+{% endif %}
+
+{# ---------- Отказ ---------- #}
+{% if app.status == 'DECLINED' %}
+<section aria-labelledby="de-h" class="card lg">
+<div class="stack-xs" style="gap:6px"><h2 id="de-h" class="h-xl">Сейчас не можем одобрить этот продукт</h2>
+<p class="ink2">Решение касается только продукта «{{ app.product.name }}». Другие варианты для вашей компании могут быть открыты.</p></div>
+{% for r in v.reasons %}
+<div class="reason red"><span class="dot-ic bad">{{ icon('x') }}</span><div class="stack-xs" style="gap:0"><span class="t">{{ r.title }}</span><span class="s">{{ r.text }} {{ r.action }}</span></div></div>
+{% endfor %}
+{% if d and d.explanation_source == 'LLM' %}<p class="small panel">{{ d.explanation }} <span class="muted">· пересказано моделью с открытыми весами</span></p>{% endif %}
+{% if alts %}
+{% for a in alts %}
+<div class="offer-box" style="gap:10px">
+<span class="small b" style="color:var(--blue)">Что можно сделать</span>
+<strong class="h3" style="font-size:18px">{{ a.name }} до {{ a.max_amount|mln }}</strong>
+<span class="ink2">Компания подходит по сроку работы. Данные компании и финансы уже заполнены — останется подтвердить согласия.</span>
+<a href="/podbor?goal={{ app.goal }}&amount={{ app.amount }}&term={{ app.term_months }}{% if app.has_guarantor %}&guarantor=1{% endif %}" class="btn primary lg self-start">Подобрать другой продукт</a>
+</div>
+{% endfor %}
+{% else %}
+<a href="/podbor" class="btn lg self-start">Подобрать другой продукт</a>
+{% endif %}
+</section>
+{% endif %}
+
+{# ---------- Подписание ---------- #}
+{% if app.status == 'SIGNING' %}
+{% set signer = (team|selectattr('can_sign')|list|first) %}
+<section aria-labelledby="si-h" class="card lg" style="gap:18px">
+<div class="stack-xs" style="gap:6px"><h2 id="si-h" class="h-xl">Документы готовы к подписанию</h2>
+<p class="ink2">Договор подписывает руководитель{% if app.has_guarantor %}, договор поручительства — собственник{% endif %}.</p></div>
+<div class="stack-sm">
+<div class="box inline"><span class="m" style="flex:1 1 240px">Кредитный договор № {{ v.contract.number if v.contract else '' }}</span><span class="small muted">Подписывает {{ signer.user.full_name if signer else app.company.director }}</span><span class="pill sm amber">Ожидает</span></div>
+{% if app.has_guarantor %}<div class="box inline"><span class="m" style="flex:1 1 240px">Договор поручительства</span><span class="small muted">Подписывает поручитель</span><span class="pill sm amber">Ожидает</span></div>{% endif %}
+<div class="box inline"><span class="m" style="flex:1 1 240px">График платежей</span><span class="small muted">{{ offer.term_months }} платежей ≈ {{ offer.monthly_payment|money }}</span></div>
+</div>
+<form method="post" action="/applications/{{ app.id }}/sign"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+<button type="submit" class="btn primary lg">Подписать (смоделировано)</button></form>
+</section>
+{% endif %}
+
+{# ---------- Выдан ---------- #}
+{% if app.status == 'DISBURSED' and v.disbursement %}
+<section aria-labelledby="dn-h" class="card lg" style="gap:18px">
+<span class="dot-ic ok" style="width:56px;height:56px">{{ icon('check', 28) }}</span>
+<h2 id="dn-h" class="h-xl">{% if app.product.kind == 'CREDIT_LINE' %}Лимит открыт, деньги доступны{% else %}Кредит выдан{% endif %}</h2>
+<dl class="grid3 panel">
+<div><dt>{% if app.product.kind == 'CREDIT_LINE' %}Лимит{% else %}Сумма{% endif %}</dt><dd class="b">{{ v.disbursement.amount|money }}</dd></div>
+<div><dt>Счёт</dt><dd class="b">{{ v.disbursement.account_masked }}</dd></div>
+<div><dt>Первый платёж</dt><dd class="b">{{ v.disbursement.first_payment_date|ddate }}</dd></div>
+</dl>
+<span class="small muted">Выдача смоделирована: реальные деньги не переводятся.</span>
+</section>
+{% endif %}
+
+{% if app.status in ('OFFER_REJECTED', 'EXPIRED', 'WITHDRAWN') %}
+<section class="card lg">
+<h2 class="h-lg">{% if app.status == 'OFFER_REJECTED' %}Вы отказались от предложения{% elif app.status == 'EXPIRED' %}Срок истёк{% else %}Заявка отозвана{% endif %}</h2>
+<p class="ink2">Заявка закрыта. Если финансирование всё ещё нужно, подайте новую — данные компании и финансы подставим из этой.</p>
+<a href="/podbor" class="btn primary lg self-start">Подобрать кредит</a>
+</section>
+{% endif %}
+</div>
+
+<aside class="col-side">
+{% if app.status in ('MANUAL_REVIEW', 'NEEDS_INFO') and v.system_decision %}
+<section aria-labelledby="why-h" class="card" style="gap:10px">
+<h2 id="why-h" class="h3">Почему заявку смотрит специалист</h2>
+<p class="small ink2" style="font-size:14px">
+{% set rr = v.system_decision.review_reasons or [] %}
+{% if rr|select('search', 'авто-лимит')|list %}Сумма больше той, что банк одобряет автоматически. {% endif %}
+{% if rr|select('search', 'недоступ|не ответил')|list %}Один из источников данных не ответил вовремя, поэтому заявку проверит человек. {% endif %}
+{% if rr|select('search', 'господдерж|только специалистом')|list %}Этот продукт всегда рассматривает специалист. {% endif %}
+Это обычная практика — решение займёт чуть больше времени, но может учесть особенности вашего бизнеса.</p>
+</section>
+{% endif %}
+{% if app.status in ('COUNTEROFFER', 'APPROVED', 'APPROVED_AUTO', 'SIGNING') %}
+<section aria-labelledby="who-h" class="card" style="gap:12px">
+<h2 id="who-h" class="h3">Кто участвует</h2>
+{% for m in team %}
+<div class="member"><span class="avatar sm {% if m.user_id != user.id %}light{% endif %}" aria-hidden="true">{{ m.user.initials }}</span>
+<div class="who"><span class="m">{{ m.user.full_name }}</span><span class="small muted">{% if m.can_sign %}Подписывает договор{% if app.has_guarantor %} и поручительство{% endif %}{% else %}Принимает предложение{% endif %}</span></div></div>
+{% endfor %}
+</section>
+{% endif %}
+<section aria-labelledby="log-h" class="card">
+<h2 id="log-h" class="h3">История</h2>
+<ol class="timeline">
+{% for h in v.history %}
+<li {% if loop.last %}style="padding-bottom:0"{% endif %}><span class="d {{ h.tone }}" aria-hidden="true"></span><div class="stack-xs" style="gap:0"><span class="m">{{ h.text }}</span><span class="small muted">{{ h.at|dshort }} · {{ h.who }}</span></div></li>
+{% endfor %}
+</ol>
+{% if v.snapshot %}
+<details><summary class="small" style="color:var(--blue);cursor:pointer">Данные заявки на момент отправки</summary>
+<div class="small ink2 stack-xs" style="margin-top:8px">
+<span>Версия {{ v.snapshot.version }} от {{ v.snapshot.created_at|dt }}</span>
+<span>Выручка {{ v.snapshot.data.financials.revenue|money if v.snapshot.data.financials else '—' }}, прибыль до % и налогов {{ v.snapshot.data.financials.ebit|money if v.snapshot.data.financials else '—' }}</span>
+<span>Обязательств: {{ v.snapshot.data.liabilities|length }}</span>
+<code class="xs muted" style="word-break:break-all">sha256 {{ v.snapshot.sha256 }}</code>
+</div></details>
+{% endif %}
+{% if v.documents %}
+<div class="stack-xs"><span class="small b">Документы</span>
+{% for doc in v.documents %}<a class="small" href="/documents/{{ doc.id }}">{{ doc.filename }}</a>{% endfor %}</div>
+{% endif %}
+</section>
+</aside>
+</div>
+{% endblock %}

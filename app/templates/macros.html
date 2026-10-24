@@ -1,0 +1,27 @@
+{% macro icon(name, size=16, sw=2.5) -%}
+<svg aria-hidden="true" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="{{ sw }}" stroke-linecap="round" stroke-linejoin="round">
+{%- if name == 'check' %}<path d="M5 12l5 5 9-10"></path>
+{%- elif name == 'excl' %}<path d="M12 7v6M12 17h.01"></path>
+{%- elif name == 'x' %}<path d="M6 6l12 12M18 6L6 18"></path>
+{%- elif name == 'plus' %}<path d="M12 5v14M5 12h14"></path>
+{%- elif name == 'down' %}<path d="M6 9l6 6 6-6"></path>
+{%- elif name == 'upload' %}<path d="M12 16V4M7 9l5-5 5 5"></path><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"></path>
+{%- elif name == 'trash' %}<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"></path>
+{%- elif name == 'warn' %}<path d="M12 9v4M12 17h.01"></path><path d="M10.3 3.9L2.4 17.5A2 2 0 0 0 4.1 20.5h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path>
+{%- elif name == 'info' %}<circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path>
+{%- elif name == 'clock' %}<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>
+{%- endif %}
+</svg>
+{%- endmacro %}
+
+{% macro pill(label_tone, size='') -%}
+<span class="pill {{ label_tone[1] }} {{ size }}">{{ label_tone[0] }}</span>
+{%- endmacro %}
+
+{% macro status_dot(ok) -%}
+{% if ok is none %}<span class="dot-ic na">{{ icon('clock', 14) }}</span>
+{% elif ok %}<span class="dot-ic ok">{{ icon('check') }}</span>
+{% else %}<span class="dot-ic warn">{{ icon('excl') }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro csrf_input(csrf) -%}<input type="hidden" name="csrf_token" value="{{ csrf }}">{%- endmacro %}

@@ -1,0 +1,6 @@
+<div class="inline" style="padding-top:8px;border-top:1px solid var(--line)">
+<form method="post" action="/applications/{{ app.id }}/accept"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+<button type="submit" class="btn primary lg">{% if app.status == 'COUNTEROFFER' %}Принять предложение{% else %}Принять и перейти к договору{% endif %}</button></form>
+<form method="post" action="/applications/{{ app.id }}/reject" onsubmit="return confirm('Отказаться от предложения? Заявка закроется.')"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+<button type="submit" class="btn lg">Отказаться</button></form>
+</div>

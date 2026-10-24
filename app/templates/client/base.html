@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon %}
+{% block header %}
+<header class="hdr">
+<div class="hdr-in">
+<a href="/cabinet" class="logo"><span class="logo-mark">К</span><span class="logo-text">Кредитный кабинет</span></a>
+{% block header_center %}
+<nav aria-label="Основное меню" class="nav">
+<a href="/cabinet" {% if nav == 'home' %}aria-current="page"{% endif %}>Мои заявки</a>
+<a href="/podbor" {% if nav == 'podbor' %}aria-current="page"{% endif %}>Подбор кредита</a>
+<a href="/company" {% if nav == 'company' %}aria-current="page"{% endif %}>Компания</a>
+</nav>
+{% endblock %}
+<span class="demo-badge">Демо-данные</span>
+{% block header_right %}
+{% if company %}
+<div class="co-switch">
+<button type="button" class="co-btn" data-toggle="co-menu" aria-haspopup="true" aria-expanded="false">
+<span style="display:flex;flex-direction:column"><span class="n">{{ company.name }}</span><span class="i">ИНН {{ company.inn }}</span></span>
+{{ icon('down', 16, 2) }}
+</button>
+<div class="co-menu" role="menu">
+{% for c in companies %}
+<form method="post" action="/company/switch">
+<input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="company_id" value="{{ c.id }}">
+<button type="submit" role="menuitem" {% if c.id == company.id %}aria-current="true"{% endif %}><span class="b">{{ c.name }}</span><span class="muted">ИНН {{ c.inn }}</span></button>
+</form>
+{% endfor %}
+<a href="/company">Добавить компанию по ИНН</a>
+</div>
+</div>
+{% endif %}
+<div class="user-menu">
+<span class="avatar" title="{{ user.full_name }}" aria-label="{{ user.full_name }}">{{ user.initials }}</span>
+<form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="linkbtn small" type="submit">Выйти</button></form>
+</div>
+{% endblock %}
+</div>
+</header>
+{% endblock %}
+{% block body %}
+<main class="wrap">
+{% for f in flashes %}<div class="flash {{ f.k }}" role="status">{{ f.m }}</div>{% endfor %}
+{% block main %}{% endblock %}
+</main>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% from "macros.html" import icon %}
+<nav aria-label="Шаги заявки" class="card" style="flex:1 1 260px;min-width:0;gap:4px">
+<div class="stack-xs" style="gap:2px;padding:0 0 16px;margin-bottom:8px;border-bottom:1px solid var(--line)">
+<span class="small muted">{{ app.product.name }}</span>
+<span class="h2">{{ app.amount|money }} · {{ app.term_months }} мес.</span>
+<a href="/podbor?app_id={{ app.id }}" class="small">Изменить параметры</a>
+</div>
+<ol class="steps">
+{% set names = ['Продукт и сумма', 'Компания', 'Финансы', 'Согласия', 'Проверка и отправка'] %}
+{% for n in names %}{% set i = loop.index %}
+<li class="{% if i < step %}ok{% endif %}" {% if i == step or (step == 4 and i == 5) %}aria-current="step"{% endif %}>
+<span class="num">{% if i < step %}{{ icon('check', 14, 3) }}{% else %}{{ i }}{% endif %}</span>
+{% if i == 1 %}<a href="/podbor?app_id={{ app.id }}">{{ n }}</a>
+{% elif i in (2, 3) and step != 3 %}<a href="/applications/{{ app.id }}/edit">{{ n }}</a>
+{% else %}{{ n }}{% endif %}
+</li>
+{% endfor %}
+</ol>
+</nav>

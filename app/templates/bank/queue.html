@@ -1,0 +1,72 @@
+{% extends "bank/base.html" %}
+{% from "macros.html" import pill %}
+{% block title %}Очередь на разбор · Кредитный конвейер{% endblock %}
+{% block main %}
+<div class="between end">
+<h1 class="h1">{% if tab == 'all' %}Все заявки{% else %}Очередь на разбор{% endif %}</h1>
+<span class="small muted">Демо-данные · синтетические компании</span>
+</div>
+
+<div class="grid4">
+<div class="stat"><span class="muted">В моей очереди</span><span class="v">{{ counts.mine }}</span></div>
+<div class="stat"><span class="muted">Срок истёк</span><span class="v" {% if counts.overdue %}style="color:var(--red)"{% endif %}>{{ counts.overdue }}</span></div>
+<div class="stat"><span class="muted">Ждут ответа клиента</span><span class="v">{{ counts.waiting }}</span></div>
+<div class="stat"><span class="muted">Решено сегодня</span><span class="v">{{ counts.decided_today }}</span></div>
+</div>
+
+<section aria-label="Заявки на разбор" class="card flat">
+<div class="between" style="padding:16px 20px;border-bottom:1px solid var(--line)">
+<nav class="tabs bank" aria-label="Фильтр очереди" style="flex-wrap:wrap">
+<a href="?tab=mine" {% if tab == 'mine' %}aria-current="page"{% endif %}>Мои · {{ counts.mine }}</a>
+<a href="?tab=unassigned" {% if tab == 'unassigned' %}aria-current="page"{% endif %}>Не назначены · {{ counts.unassigned }}</a>
+<a href="?tab=waiting" {% if tab == 'waiting' %}aria-current="page"{% endif %}>Ждут клиента · {{ counts.waiting }}</a>
+<a href="?tab=decided" {% if tab == 'decided' %}aria-current="page"{% endif %}>Решённые</a>
+<a href="?tab=all" {% if tab == 'all' %}aria-current="page"{% endif %}>Все</a>
+</nav>
+<form method="get" class="inline" style="gap:8px">
+<input type="hidden" name="tab" value="{{ tab }}">
+<label for="q" class="sr">Поиск по номеру или ИНН</label>
+<input id="q" name="q" type="search" value="{{ q }}" placeholder="Номер заявки или ИНН" class="txt sm" style="width:240px">
+<label for="prod" class="sr">Продукт</label>
+<select id="prod" name="product" class="sel sm" onchange="this.form.submit()">
+<option value="">Все продукты</option>
+{% for p in products %}<option value="{{ p.code }}" {% if product == p.code %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+</select>
+<button class="btn" type="submit" style="min-height:40px">Найти</button>
+</form>
+</div>
+<div class="tbl-wrap">
+<table class="queue">
+<thead><tr>
+<th scope="col">Заявка</th><th scope="col">Компания</th><th scope="col">Продукт и сумма</th><th scope="col">Скоринг</th>
+<th scope="col">Почему на разборе</th><th scope="col">Срок</th><th scope="col">Статус</th>
+</tr></thead>
+<tbody>
+{% for r in rows %}
+{% set a = r.app %}
+<tr class="{% if r.overdue %}overdue{% elif r.task and r.task.assigned_to == user.id and a.status == 'MANUAL_REVIEW' %}mine{% endif %}">
+<td><a href="/bank/applications/{{ a.id }}" class="b">{{ a.number }}</a></td>
+<td><div class="cell2"><span class="m">{{ a.company.name }}</span><span class="s">ИНН {{ a.company.inn }}</span></div></td>
+<td><div class="cell2"><span>{{ a.product.name }}</span><span class="s">{{ a.amount|money }} · {{ a.term_months }} мес.</span></div></td>
+<td class="nowrap">{% if r.score %}<span class="inline" style="gap:8px;flex-wrap:nowrap"><strong class="b">{{ r.score.score }}</strong>
+<span class="chip {% if r.score.zone == 'HIGH' %}green{% elif r.score.zone == 'LOW' %}red{% else %}amber{% endif %}">{% if r.score.zone == 'HIGH' %}Высокая{% elif r.score.zone == 'LOW' %}Низкая{% else %}Серая зона{% endif %}</span></span>
+{% else %}<span class="chip neutral">Нет оценки</span>{% endif %}</td>
+<td>{% if a.flags and a.flags.source_unavailable %}<span class="cell2"><span>{{ a.flags.manual_reason }}</span><span class="s">Решить вручную по имеющимся данным</span></span>{% else %}{{ r.reason or '—' }}{% endif %}</td>
+<td>
+{% if a.status == 'NEEDS_INFO' %}Ответ клиента{% elif r.task and not r.task.closed_at %}
+{% set hl = hours_left(r.task.due_at) %}
+{% if hl < 0 %}<span class="b" style="color:var(--red)">Просрочено на {{ (-hl)|round(0, 'ceil')|int }} ч</span>
+{% elif hl < 24 %}{{ hl|round(0, 'ceil')|int }} ч{% else %}{{ (hl / 24)|round(0, 'ceil')|int }} дн.{% endif %}
+{% else %}<span class="muted">{{ a.updated_at|dshort }}</span>{% endif %}
+{% if r.task and r.task.assignee and tab != 'mine' %}<div class="xs muted">{{ r.task.assignee.full_name }}</div>{% endif %}
+</td>
+<td>{{ pill(label_of(a.status), 'sm') }}</td>
+</tr>
+{% else %}
+<tr><td colspan="7" class="muted" style="padding:28px 20px">{% if tab == 'mine' %}В вашей очереди пусто. Возьмите заявку из вкладки «Не назначены».{% else %}Заявок нет.{% endif %}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+</section>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% from "macros.html" import pill %}
+<section id="app-list" aria-labelledby="apps-h" class="stack-sm" style="gap:12px"
+  {% if live %}hx-get="/cabinet/list?tab={{ tab }}" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+<div class="between">
+<h2 id="apps-h" class="h2">Заявки</h2>
+<nav class="tabs" aria-label="Фильтр заявок">
+<a href="/cabinet?tab=active" {% if tab != 'done' %}aria-current="page"{% endif %}>Активные · {{ counts.active }}</a>
+<a href="/cabinet?tab=done" {% if tab == 'done' %}aria-current="page"{% endif %}>Завершённые · {{ counts.done }}</a>
+</nav>
+</div>
+{% for c in cards %}
+{% set a = c.app %}
+{% if a.status in ('DRAFT', 'NEEDS_CORRECTION') %}
+<div class="app-card draft">
+<div class="main">
+<span class="small muted">{% if a.status == 'DRAFT' %}Черновик{% else %}{{ a.number }} · нужно исправить{% endif %} · {{ a.product.name }}</span>
+<span class="sum">{{ a.amount|money }} на {{ a.term_months }} мес.</span>
+<span class="small muted">Сохранено {{ a.updated_at|dshort }}</span>
+</div>
+<div class="prog">
+<div class="progress" aria-hidden="true"><div style="width: {{ c.filled.pct }}%"></div></div>
+<span class="small muted">Заполнено {{ c.filled.pct }}%{% if c.filled.left %} · осталось: {{ c.filled.left|join(', ') }}{% endif %}</span>
+</div>
+<a href="/applications/{{ a.id }}/edit" class="btn">Продолжить</a>
+</div>
+{% else %}
+<a href="/applications/{{ a.id }}" class="app-card {% if a.status in ('NEEDS_INFO',) %}attn{% endif %}">
+<div class="main">
+<span class="small muted">{{ a.number }} · {{ a.product.name }}</span>
+<span class="sum">{{ a.amount|money }} на {{ a.term_months }} мес.</span>
+<span class="small muted">Цель: {{ GOAL_PURPOSE.get(a.goal, a.goal) }}</span>
+</div>
+<div class="prog">
+{% if c.stage >= 0 %}
+<div class="bars" aria-hidden="true">
+{% for i in range(6) %}<span class="{% if i < c.stage or c.stage == 6 %}done{% elif i == c.stage %}{% if c.problem %}prob{% else %}cur{% endif %}{% endif %}"></span>{% endfor %}
+</div>
+<span class="small muted">
+{% if a.status == 'DISBURSED' %}Средства зачислены {{ a.updated_at|ddate }}
+{% elif c.offer %}Этап 5 из 6 · Предложение действует до {{ c.offer.valid_until|ddate }}
+{% elif c.info %}Этап 4 из 6 · Ответьте до {{ c.info.due_at|ddate }}
+{% else %}Этап {{ [c.stage + 1, 6]|min }} из 6{% endif %}
+</span>
+{% endif %}
+</div>
+{{ pill(c.label) }}
+</a>
+{% endif %}
+{% else %}
+<div class="card" style="align-items:flex-start">
+<span class="h3">{% if tab == 'done' %}Завершённых заявок пока нет{% else %}Активных заявок нет{% endif %}</span>
+<p class="muted">Подберите продукт — займёт пару минут, данные компании подставим из реестра.</p>
+<a href="/podbor" class="btn primary">Подобрать кредит</a>
+</div>
+{% endfor %}
+</section>

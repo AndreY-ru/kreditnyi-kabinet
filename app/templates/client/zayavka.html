@@ -1,0 +1,119 @@
+{% extends "client/base.html" %}
+{% from "macros.html" import icon %}
+{% block title %}Заявка: компания и финансы · Кредитный кабинет{% endblock %}
+{% block header_center %}
+<div style="flex:1 1 auto;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px">
+<span class="b">Заявка на {{ app.product.name|lower }}</span>
+<span id="saved">{% with at = app.updated_at %}{% include "partials/saved.html" %}{% endwith %}</span>
+</div>
+{% endblock %}
+{% block header_right %}
+<a href="/cabinet" class="btn" style="font-weight:500">Выйти и сохранить</a>
+{% endblock %}
+{% macro money_field(id, label_text, value, hint, signed=False) %}
+<div class="field">
+<label for="{{ id }}">{{ label_text }}</label>
+<div class="input {% if errors.get(id) %}invalid{% endif %}"><input id="{{ id }}" name="{{ id }}" type="text" inputmode="numeric" data-money {% if signed %}data-signed{% endif %} value="{{ value|money_input }}" {% if id == 'amortization' %}placeholder="0"{% endif %} {% if errors.get(id) %}aria-invalid="true" aria-describedby="{{ id }}-err"{% endif %}><span class="u">₽</span></div>
+{% if errors.get(id) %}<span id="{{ id }}-err" class="err">{{ errors[id] }}</span>{% else %}<span class="hint">{{ hint }}</span>{% endif %}
+</div>
+{% endmacro %}
+{% block main %}
+{% if app.status == 'NEEDS_CORRECTION' and app.validation_errors %}
+<section class="alert"><span class="ic">{{ icon('warn', 22, 2) }}</span>
+<div class="txt"><strong>Банк нашёл ошибки в заявке {{ app.number }}</strong>
+<span>{% for e in app.validation_errors %}{{ e.message }}{% if not loop.last %}; {% endif %}{% endfor %}</span></div></section>
+{% endif %}
+{% set f = app.financials %}
+<div class="row">
+{% include "partials/steps.html" %}
+
+<form method="post" action="/applications/{{ app.id }}/edit" class="col-main" style="flex:999 1 640px"
+  hx-post="/applications/{{ app.id }}/edit" hx-trigger="change delay:600ms" hx-vals='{"action": "autosave"}' hx-target="#saved" hx-swap="innerHTML">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+
+<section aria-labelledby="co-h" class="card" style="gap:16px">
+<div class="between">
+<div class="inline" style="gap:10px"><h2 id="co-h" class="h3" style="font-size:18px">Компания</h2><span class="pill sm green">Заполнено по ИНН</span></div>
+</div>
+<dl class="facts c3">
+<div><dt>Название</dt><dd>{{ company.name }}</dd></div>
+<div><dt>ИНН / ОГРН</dt><dd>{{ company.inn }} / {{ company.ogrn or '—' }}</dd></div>
+<div><dt>Руководитель</dt><dd>{{ company.director or '—' }}</dd></div>
+<div><dt>Юридический адрес</dt><dd>{{ company.address or '—' }}</dd></div>
+<div><dt>Учредители</dt><dd>{% for fo in company.founders or [] %}{{ fo.name }} — {{ fo.share }}%{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}</dd></div>
+<div><dt>Ваши полномочия</dt><dd>{{ member.authority or member.position if member else '—' }}</dd></div>
+</dl>
+<p class="small muted">Данные из ЕГРЮЛ (смоделировано). Если что-то неверно, сначала обновите сведения в налоговой — банк сверяет заявку с реестром.</p>
+{% if errors.get('has_guarantor') or errors.get('has_collateral') or errors.get('amount') or errors.get('term_months') %}
+<div class="panel red"><span class="err">{{ errors.get('has_guarantor') or errors.get('has_collateral') or errors.get('amount') or errors.get('term_months') }}</span> · <a href="/podbor?app_id={{ app.id }}">Изменить параметры</a></div>
+{% endif %}
+</section>
+
+<section aria-labelledby="fin-h" class="card lg focus" style="gap:22px">
+<div class="between" style="align-items:flex-start">
+<div class="stack-xs"><h2 id="fin-h" class="h-lg">Финансы компании</h2><p class="muted">За последние 12 месяцев. Цифры можно взять из бухгалтерской отчётности.</p></div>
+<span class="small muted" style="max-width:260px">Выручку и расходы подставили из «Прозрачного бизнеса» — проверьте.</span>
+</div>
+<div class="grid2" style="gap:20px 24px">
+{{ money_field('revenue', 'Выручка', f.revenue if f else None, 'Отчёт о финрезультатах, строка 2110') }}
+{{ money_field('expenses', 'Расходы', f.expenses if f else None, 'Себестоимость и прочие расходы') }}
+{{ money_field('ebit', 'Прибыль до процентов и налогов', f.ebit if f else None, 'Строка 2300 плюс проценты к уплате (2330). Убыток — с минусом', True) }}
+{{ money_field('amortization', 'Амортизация', f.amortization if f else None, 'Если амортизации нет, поставьте 0') }}
+<div class="field">
+<label for="revenue_trend">Как менялась выручка за год</label>
+<select id="revenue_trend" name="revenue_trend" class="sel {% if errors.get('revenue_trend') %}invalid{% endif %}">
+<option value="" {% if not f or not f.revenue_trend %}selected{% endif %}>Выберите</option>
+<option value="GROWTH" {% if f and f.revenue_trend == 'GROWTH' %}selected{% endif %}>Выросла</option>
+<option value="FLAT" {% if f and f.revenue_trend == 'FLAT' %}selected{% endif %}>Почти не изменилась</option>
+<option value="DECLINE" {% if f and f.revenue_trend == 'DECLINE' %}selected{% endif %}>Снизилась</option>
+</select>
+{% if errors.get('revenue_trend') %}<span class="err">{{ errors['revenue_trend'] }}</span>{% endif %}
+</div>
+<div class="field">
+<label for="employees">Сотрудников в штате</label>
+<div class="input"><input id="employees" name="employees" type="text" inputmode="numeric" value="{{ f.employees if f and f.employees is not none else '' }}"></div>
+<span class="hint">Подставили из «Прозрачного бизнеса»</span>
+</div>
+</div>
+
+<div class="stack-sm" style="gap:12px">
+<div class="between" style="align-items:baseline"><h3 class="h3">Действующие кредиты и лизинг</h3><span class="small muted">Банк всё равно увидит их в кредитной истории — лучше указать сразу</span></div>
+<div class="tbl-wrap bordered">
+<table class="tbl" style="min-width:640px">
+<thead><tr><th scope="col">Кредитор</th><th scope="col">Остаток долга, ₽</th><th scope="col">Платёж в месяц, ₽</th><th scope="col">Погашение</th><th scope="col"><span class="sr">Действия</span></th></tr></thead>
+<tbody id="liabilities-body">
+{% for l in app.liabilities %}
+<tr>
+<td><label class="sr" for="lc{{ loop.index }}">Кредитор</label><input id="lc{{ loop.index }}" name="l_creditor" value="{{ l.creditor }}"></td>
+<td><label class="sr" for="lb{{ loop.index }}">Остаток</label><input id="lb{{ loop.index }}" name="l_balance" inputmode="numeric" data-money value="{{ l.balance|money_input }}"></td>
+<td><label class="sr" for="lp{{ loop.index }}">Платёж</label><input id="lp{{ loop.index }}" name="l_payment" inputmode="numeric" data-money value="{{ l.monthly_payment|money_input }}"></td>
+<td><label class="sr" for="lm{{ loop.index }}">Погашение</label><input id="lm{{ loop.index }}" name="l_maturity" placeholder="ММ.ГГГГ" value="{{ l.maturity or '' }}"></td>
+<td class="act"><button type="button" class="btn icon" aria-label="Удалить строку" data-del-row>{{ icon('trash', 18, 2) }}</button></td>
+</tr>
+{% else %}
+<tr id="liabilities-empty"><td colspan="5" class="muted">Действующих кредитов нет</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+<template id="liability-row"><tr>
+<td><input name="l_creditor" aria-label="Кредитор" placeholder="Банк или лизинговая компания"></td>
+<td><input name="l_balance" aria-label="Остаток долга" inputmode="numeric" data-money></td>
+<td><input name="l_payment" aria-label="Платёж в месяц" inputmode="numeric" data-money></td>
+<td><input name="l_maturity" aria-label="Погашение" placeholder="ММ.ГГГГ"></td>
+<td class="act"><button type="button" class="btn icon" aria-label="Удалить строку" data-del-row>{{ icon('trash', 18, 2) }}</button></td>
+</tr></template>
+<button type="button" class="btn soft self-start" data-add-liability>{{ icon('plus', 16, 2.2) }}Добавить обязательство</button>
+</div>
+</section>
+
+<div class="between" style="padding:4px 0">
+<a href="/podbor?app_id={{ app.id }}" class="btn lg">Назад</a>
+<div class="inline">
+{% if show_errors and error_count %}<span class="small" style="color:var(--red)">Исправьте {{ error_count }} {{ plural(error_count, 'поле', 'поля', 'полей') }}, чтобы продолжить</span>{% endif %}
+<button type="submit" name="action" value="next" class="btn primary lg">Далее: согласия</button>
+</div>
+</div>
+</form>
+</div>
+{% endblock %}

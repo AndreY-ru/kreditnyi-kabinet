@@ -1,0 +1,64 @@
+### Примеры запросов (формат REST Client / JetBrains HTTP Client; Bruno и Postman импортируют docs/openapi.json)
+@base = http://localhost:8000
+
+### Вход клиента (ставит cookie сессии)
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{"email": "anna@demo.local", "password": "demo"}
+
+### Мои компании
+GET {{base}}/api/companies
+
+### Подбор продукта
+POST {{base}}/api/products/match
+Content-Type: application/json
+
+{"goal": "working", "amount": 1000000, "term_months": 12, "has_guarantor": true, "company_id": 1}
+
+### Черновик заявки
+POST {{base}}/api/applications
+Content-Type: application/json
+
+{"company_id": 1, "product_id": 1, "amount": 1000000, "term_months": 12, "goal": "working", "has_guarantor": true}
+
+### Финансы и обязательства
+PUT {{base}}/api/applications/9/financials
+Content-Type: application/json
+
+{"revenue": 84600000, "expenses": 76900000, "ebit": 6200000, "amortization": 300000, "revenue_trend": "GROWTH",
+ "liabilities": [{"creditor": "Банк А", "balance": 2400000, "monthly_payment": 160000, "maturity": "08.2027"}]}
+
+### Согласия
+POST {{base}}/api/applications/9/consents
+Content-Type: application/json
+
+{"kind": "BKI"}
+
+### Отправка (идемпотентно)
+POST {{base}}/api/applications/9/submit
+Idempotency-Key: 6c1f0a1e-demo
+
+### Статус и журнал
+GET {{base}}/api/applications/9
+###
+GET {{base}}/api/applications/9/history
+
+### --- Банк ---
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{"email": "maria@bank.local", "password": "demo"}
+
+### Очередь
+GET {{base}}/api/bank/queue?tab=unassigned
+
+### Карточка заявки
+GET {{base}}/api/bank/applications/2
+
+### Встречное предложение (expected_version из карточки)
+POST {{base}}/api/bank/applications/2/decision
+Content-Type: application/json
+
+{"kind": "counter", "expected_version": 9, "comment": "Снижаем до лимита без залога",
+ "amount": 9000000, "term_months": 36, "rate": 20.9, "reasons": ["COLLATERAL", "DEBT_LOAD"]}

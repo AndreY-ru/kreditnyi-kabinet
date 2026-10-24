@@ -1,0 +1,66 @@
+{% extends "client/base.html" %}
+{% from "macros.html" import icon, status_dot %}
+{% block title %}Подбор кредита · Кредитный кабинет{% endblock %}
+{% block main %}
+<div class="stack-xs" style="gap:6px">
+<a href="/cabinet" style="font-size:14px;text-decoration:none">← Мои заявки</a>
+<h1 class="h1">{% if draft %}Изменить параметры заявки{% else %}Подберём кредит под вашу задачу{% endif %}</h1>
+<p class="muted" style="max-width:720px">Ответьте на четыре вопроса. Покажем подходящие продукты и заранее предупредим о том, что может повлиять на решение.</p>
+</div>
+
+<div class="row">
+<form id="podbor-form" aria-label="Параметры подбора" class="card lg" style="flex:1 1 400px;min-width:0;gap:28px"
+  action="/podbor" method="get"
+  hx-get="/podbor/results" hx-target="#results" hx-trigger="change, input delay:400ms from:#sum" hx-swap="innerHTML">
+{% if draft %}<input type="hidden" name="app_id" value="{{ draft.id }}">{% endif %}
+<fieldset class="stack-sm" style="gap:12px">
+<legend class="h3" style="margin-bottom:12px">1. Для чего нужны деньги?</legend>
+<div class="seg">
+{% for code, name in GOALS.items() %}
+<input type="radio" id="g-{{ code }}" name="goal" value="{{ code }}" {% if p.goal == code %}checked{% endif %}><label for="g-{{ code }}">{{ name }}</label>
+{% endfor %}
+</div>
+</fieldset>
+
+<div class="field" style="gap:8px">
+<label for="sum" class="h3">2. Какая сумма нужна?</label>
+<div class="input big"><input id="sum" name="amount" type="text" inputmode="numeric" data-money value="{{ p.amount|money_input }}" autocomplete="off"><span class="u">₽</span></div>
+<span class="hint">Подсказка: для оборотного кредита без залога обычно хватает суммы до 30% годовой выручки</span>
+</div>
+
+<fieldset>
+<legend class="h3" style="margin-bottom:12px">3. На какой срок?</legend>
+<div class="seg">
+{% for t in terms %}<input type="radio" id="t-{{ t }}" name="term" value="{{ t }}" {% if p.term == t %}checked{% endif %}><label for="t-{{ t }}">{{ t }} мес.</label>{% endfor %}
+</div>
+</fieldset>
+
+<fieldset class="stack-sm" style="gap:12px">
+<legend class="h3" style="margin-bottom:12px">4. Что можете предложить банку?</legend>
+<label class="cb"><input type="checkbox" name="collateral" value="1" {% if p.collateral %}checked{% endif %}><span class="stack-xs" style="gap:0"><span class="m">Залог</span><span class="small muted">Недвижимость, оборудование или транспорт</span></span></label>
+<label class="cb"><input type="checkbox" name="guarantor" value="1" {% if p.guarantor %}checked{% endif %}><span class="stack-xs" style="gap:0"><span class="m">Поручительство собственника</span><span class="small muted">Обязательно для большинства продуктов для ООО</span></span></label>
+</fieldset>
+<noscript><button class="btn dark" type="submit">Показать продукты</button></noscript>
+</form>
+
+<div style="flex:999 1 560px;min-width:0" class="stack">
+{% if check %}
+<section id="self-check" aria-labelledby="sc-h" class="card" style="gap:16px">
+<div class="between"><h2 id="sc-h" class="h3">Самопроверка по данным компании</h2><span class="small muted">ЕГРЮЛ и «Прозрачный бизнес» · смоделировано</span></div>
+<div class="grid2">
+{% for it in check["items"] %}
+<div class="check {% if it.ok is none %}warn{% elif not it.ok %}bad{% endif %}">
+{{ status_dot(it.ok) }}
+<div class="stack-xs" style="gap:0"><span class="t">{{ it.title }}</span><span class="small {% if it.ok is none %}{% else %}muted{% endif %}" {% if it.ok is none %}style="color:var(--amber-ink)"{% endif %}>{{ it.text }}</span></div>
+</div>
+{% endfor %}
+</div>
+<p class="small muted">Это подсказка, а не решение банка. Кредитную историю запросим только после вашего согласия.</p>
+</section>
+{% endif %}
+<div id="results" class="stack">
+{% include "partials/podbor_results.html" %}
+</div>
+</div>
+</div>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends "client/base.html" %}
+{% from "macros.html" import icon %}
+{% block title %}Согласия и отправка · Кредитный кабинет{% endblock %}
+{% block header_center %}
+<div style="flex:1 1 auto;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px">
+<span class="b">Заявка на {{ app.product.name|lower }}</span>
+<span class="small muted">Черновик сохранён в {{ app.updated_at|dt('%H:%M') }}</span>
+</div>
+{% endblock %}
+{% block header_right %}<a href="/cabinet" class="btn" style="font-weight:500">Выйти и сохранить</a>{% endblock %}
+{% macro consent_box(kind, text) %}
+<label class="cb big">
+<input type="checkbox" name="value" value="1" {% if consents[kind] %}checked{% endif %}
+  hx-post="/applications/{{ app.id }}/consents/{{ kind }}" hx-trigger="change" hx-target="#submit-panel" hx-swap="outerHTML">
+<span class="m">{{ text }}</span>
+</label>
+{% endmacro %}
+{% block main %}
+<div class="stack-xs" style="gap:6px">
+<span class="small muted">Шаг 4 и 5 из 5</span>
+<h1 class="h1">Согласия и отправка</h1>
+</div>
+{% if errors %}
+<div class="flash err" role="alert">Заявку нельзя отправить: {% for e in errors %}{{ e.message }}{% if not loop.last %}; {% endif %}{% endfor %}</div>
+{% endif %}
+<div class="row">
+<div class="col-main" style="flex:999 1 600px">
+<section aria-labelledby="c1-h" class="card" style="gap:12px">
+<h2 id="c1-h" class="h3" style="font-size:18px">Обработка персональных данных</h2>
+<p class="ink2">Нужно, чтобы банк мог хранить и проверять данные руководителя, поручителя и сотрудников, указанных в заявке.</p>
+{{ consent_box('PD', 'Даю согласие на обработку персональных данных') }}
+<details><summary class="small" style="color:var(--blue);cursor:pointer">Читать полный текст</summary><p class="small ink2" style="margin-top:8px">{{ texts['PD'][1] }} Версия текста {{ texts['PD'][0] }}.</p></details>
+</section>
+
+<section aria-labelledby="c2-h" class="card">
+<div class="stack-xs">
+<h2 id="c2-h" class="h3" style="font-size:18px">Запрос кредитной истории</h2>
+<p class="ink2">Без этого согласия банк не может оценить заявку: кредитная история показывает, как компания платила по другим кредитам.</p>
+</div>
+<dl class="grid3 panel" style="font-size:14px">
+<div><dt>Цель</dt><dd class="m">Оценка заявки {{ app.number }}</dd></div>
+<div><dt>Бюро</dt><dd class="m">[Название БКИ] · смоделировано</dd></div>
+<div><dt>Действует</dt><dd class="m">6 месяцев{% if consents['BKI'] %}, до {{ consents['BKI'].valid_until|ddate }}{% endif %}</dd></div>
+</dl>
+<p class="small muted">Если вы заключите договор, согласие продолжит действовать весь срок договора — так требует закон о кредитных историях.</p>
+{{ consent_box('BKI', 'Даю согласие от имени ' ~ company.name) }}
+{% if need_guarantor %}
+{% set founder = ((company.founders or [{}])[0].name) or company.director %}
+<div class="box inline">
+<span class="avatar sm light" aria-hidden="true">{{ founder.split()[0][0] if founder else 'П' }}{{ founder.split()[1][0] if founder and founder.split()|length > 1 else '' }}</span>
+<div class="stack-xs" style="flex:1 1 240px;gap:0"><span class="m">Поручитель {{ founder }}</span>
+<span class="small muted">{% if consents['BKI_GUARANTOR'] %}Согласие получено {{ consents['BKI_GUARANTOR'].given_at|dshort }} (подпись поручителя смоделирована){% else %}Нужно согласие поручителя на запрос его кредитной истории{% endif %}</span></div>
+{% if consents['BKI_GUARANTOR'] %}<span class="pill sm green">Согласие получено</span>{% else %}
+<label class="cb big" style="flex:none"><input type="checkbox" name="value" value="1"
+  hx-post="/applications/{{ app.id }}/consents/BKI_GUARANTOR" hx-trigger="change" hx-target="#submit-panel" hx-swap="outerHTML"><span class="small m">Поручитель подтвердил (демо)</span></label>{% endif %}
+</div>
+{% endif %}
+</section>
+
+<section aria-labelledby="sum-h" class="card" style="gap:4px">
+<h2 id="sum-h" class="h3" style="font-size:18px;margin-bottom:8px">Проверьте заявку</h2>
+<div class="kv-row"><span class="k">Продукт</span><span class="v">{{ app.product.name }} · {{ app.amount|money }} · {{ app.term_months }} мес.</span><a href="/podbor?app_id={{ app.id }}" style="font-size:14px">Изменить</a></div>
+<div class="kv-row"><span class="k">Цель</span><span class="v">{{ GOALS.get(app.goal, app.goal) }}</span><a href="/podbor?app_id={{ app.id }}" style="font-size:14px">Изменить</a></div>
+<div class="kv-row"><span class="k">Компания</span><span class="v">{{ company.name }}, ИНН {{ company.inn }}</span><a href="/applications/{{ app.id }}/edit" style="font-size:14px">Изменить</a></div>
+<div class="kv-row"><span class="k">Финансы</span><span class="v">Выручка {{ app.financials.revenue|mln if app.financials else '—' }} · {{ app.liabilities|length }} {{ plural(app.liabilities|length, 'действующее обязательство', 'действующих обязательства', 'действующих обязательств') }}</span><a href="/applications/{{ app.id }}/edit" style="font-size:14px">Изменить</a></div>
+<div class="kv-row"><span class="k">Обеспечение</span><span class="v">{% if app.has_collateral %}Залог{% if app.has_guarantor %} и поручительство собственника{% endif %}{% elif app.has_guarantor %}Поручительство собственника{% else %}Без обеспечения{% endif %}</span><a href="/podbor?app_id={{ app.id }}" style="font-size:14px">Изменить</a></div>
+</section>
+</div>
+
+<aside class="col-side" style="flex:1 1 340px">
+<section aria-labelledby="next-h" class="card" style="gap:16px">
+<h2 id="next-h" class="h3">Что будет после отправки</h2>
+<ol class="numlist">
+<li><span class="k">1</span><span><strong class="b">Проверим полноту данных</strong><br><span class="small muted" style="font-size:14px">Несколько минут</span></span></li>
+<li><span class="k">2</span><span><strong class="b">Запросим реестры и кредитную историю</strong><br><span class="muted" style="font-size:14px">ФНС и бюро кредитных историй</span></span></li>
+<li><span class="k">3</span><span><strong class="b">Оценим заявку</strong><br><span class="muted" style="font-size:14px">Автоматически или с участием специалиста</span></span></li>
+<li><span class="k">4</span><span><strong class="b">Покажем решение здесь</strong><br><span class="muted" style="font-size:14px">Обычно до {{ app.product.decision_days }} рабочих дней</span></span></li>
+</ol>
+<p class="small ink2 panel" style="padding:12px 14px;border-radius:10px">После отправки данные заявки фиксируются. Изменить их можно будет, если банк попросит уточнения.</p>
+</section>
+{% include "partials/submit_panel.html" %}
+</aside>
+</div>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "bank/base.html" %}
+{% block title %}Процесс · Кредитный конвейер{% endblock %}
+{% block main %}
+<div class="between end"><h1 class="h1">Процесс</h1><span class="small muted">Для руководителя кредитного процесса · демо-данные</span></div>
+{% set total = m.by_status.values()|sum %}
+<div class="grid4">
+<div class="stat"><span class="muted">Всего заявок</span><span class="v">{{ total }}</span></div>
+<div class="stat"><span class="muted">Решено автоматически</span><span class="v">{{ m.auto }}</span></div>
+<div class="stat"><span class="muted">Ушло на ручной разбор</span><span class="v">{{ m.manual }}</span></div>
+<div class="stat"><span class="muted">Выдано</span><span class="v">{{ m.by_status.get('DISBURSED', 0) }}</span></div>
+</div>
+<div class="row">
+<section class="card col-main" aria-labelledby="st-h">
+<h2 id="st-h" class="h3">Заявки по статусам</h2>
+<div class="tbl-wrap"><table class="tbl"><thead><tr><th scope="col">Статус</th><th scope="col">Код</th><th scope="col" style="text-align:right">Заявок</th><th scope="col" style="text-align:right">Среднее время в статусе</th></tr></thead>
+<tbody>
+{% for st, n in m.by_status|dictsort(by='value', reverse=true) %}
+{% set sec = m.stage_avg.get(st) %}
+<tr><td>{{ label_of(st)[0] }}</td><td><code class="st">{{ st }}</code></td><td style="text-align:right">{{ n }}</td>
+<td style="text-align:right">{% if sec is none %}—{% elif sec < 120 %}{{ sec|round(1) }} с{% elif sec < 7200 %}{{ (sec / 60)|round|int }} мин{% else %}{{ (sec / 3600)|round(1) }} ч{% endif %}</td></tr>
+{% endfor %}
+</tbody></table></div>
+<p class="xs muted">Время в статусе считается по журналу переходов: от входа в статус до следующего перехода.</p>
+</section>
+<section class="card col-side" aria-labelledby="rs-h">
+<h2 id="rs-h" class="h3">Причины отказов и встречных предложений</h2>
+{% set mx = (m.reasons.values()|max) if m.reasons else 1 %}
+{% for code, n in m.reasons|dictsort(by='value', reverse=true) %}
+<div class="stack-xs"><div class="between"><span class="m">{{ reasons[code].title if code in reasons else code }}</span><span class="b">{{ n }}</span></div>
+<div class="progress" aria-hidden="true"><div style="width:{{ (n / mx * 100)|round|int }}%;background:var(--amber-strong)"></div></div></div>
+{% else %}<p class="muted">Пока нет отказов.</p>{% endfor %}
+</section>
+</div>
+{% endblock %}

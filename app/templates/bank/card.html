@@ -1,0 +1,213 @@
+{% extends "bank/base.html" %}
+{% from "macros.html" import icon, pill, status_dot %}
+{% block title %}{{ app.number }} · Кредитный конвейер{% endblock %}
+{% block main %}
+{% set sc = v.score %}
+{% set task = v.task %}
+{% set snap = v.snapshot.data if v.snapshot else None %}
+{% set f = app.financials %}
+<div class="between end">
+<div class="stack-xs" style="gap:6px">
+<a href="/bank/queue" style="text-decoration:none">← Очередь</a>
+<div class="inline"><h1 class="h1">{{ app.number }} · {{ app.company.name }}</h1>{{ pill(v.label, 'sm') }}<code class="st">{{ app.status }}</code></div>
+<span class="muted">
+{% if task and not task.closed_at %}
+{% if task.assignee %}Назначена {% if task.assigned_to == user.id %}вам{% else %}{{ task.assignee.full_name }}{% endif %} {{ task.assigned_at|dt('%d.%m в %H:%M') }}{% else %}Не назначена{% endif %}
+{% set hl = hours_left(task.due_at) %} · {% if hl < 0 %}срок решения истёк{% else %}срок решения истекает через {{ hl|round(0, 'ceil')|int }} ч{% endif %}
+{% else %}Обновлена {{ app.updated_at|dt }}{% endif %} · демо-данные</span>
+</div>
+<div class="inline">
+{% if task and not task.closed_at and app.status == 'MANUAL_REVIEW' %}
+{% if not task.assigned_to %}
+<form method="post" action="/bank/applications/{{ app.id }}/take"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn dark" type="submit">Взять в работу</button></form>
+{% elif task.assigned_to == user.id %}
+<form method="post" action="/bank/applications/{{ app.id }}/release"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn" style="font-weight:500" type="submit">Вернуть в общую очередь</button></form>
+{% endif %}
+{% endif %}
+</div>
+</div>
+
+<div class="row">
+<div class="col-main" style="flex:999 1 640px">
+
+<section aria-labelledby="app-h" class="card">
+<div class="between"><h2 id="app-h" class="h3">Заявка</h2>
+{% if v.snapshot %}<span class="xs muted">Снимок данных v{{ v.snapshot.version }} · {{ v.snapshot.created_at|dshort }} · sha256 {{ v.snapshot.sha256[:4] }}…{{ v.snapshot.sha256[-4:] }}</span>{% endif %}</div>
+<dl class="facts c4">
+<div><dt>Продукт</dt><dd>{{ app.product.name }}</dd></div>
+<div><dt>Сумма и срок</dt><dd>{{ app.amount|money }} · {{ app.term_months }} мес.</dd></div>
+<div><dt>Цель</dt><dd>{{ GOALS.get(app.goal, app.goal) }}</dd></div>
+<div><dt>Обеспечение</dt><dd>{% if app.has_collateral %}Залог{% if app.has_guarantor %} + поручительство{% endif %}{% elif app.has_guarantor %}Поручительство собственника{% else %}Нет{% endif %}</dd></div>
+<div><dt>Выручка, 12 мес.</dt><dd>{{ f.revenue|mln if f else '—' }}{% if f and f.revenue_trend %} · {{ {'GROWTH': 'растёт', 'FLAT': 'без изменений', 'DECLINE': 'снижается'}[f.revenue_trend] }}{% endif %}</dd></div>
+<div><dt>Прибыль до % и налогов</dt><dd>{{ f.ebit|mln if f else '—' }}{% if f and f.amortization %} + аморт. {{ f.amortization|mln }}{% endif %}</dd></div>
+<div><dt>Действующий долг</dt><dd>{{ app.liabilities|sum(attribute='balance')|mln }} · {{ app.liabilities|length }} {{ plural(app.liabilities|length, 'обязательство', 'обязательства', 'обязательств') }}</dd></div>
+<div><dt>Подал</dt><dd>{{ app.author.full_name }}</dd></div>
+</dl>
+</section>
+
+<section aria-labelledby="chk-h" class="card" style="gap:12px">
+<h2 id="chk-h" class="h3">Проверки и источники</h2>
+<div class="grid2" style="gap:10px">
+{% set eg = checks.get('egrul') %}{% set tr = checks.get('transparent') %}{% set bk = checks.get('bki') %}
+<div class="check bordered">{{ status_dot(eg.ok if eg else none) }}
+<div class="stack-xs" style="gap:2px"><span class="b">ЕГРЮЛ</span>
+{% if eg and eg.ok %}{% set r = eg.check.response %}<span>{% if r.status == 'ACTIVE' %}Действует{% else %}<strong style="color:var(--red)">{{ r.status }}</strong>{% endif %} · рег. {{ r.registered_at }} · ОКВЭД {{ r.okved }}</span>
+{% elif eg %}<span style="color:var(--red)">Не ответил: {{ eg.failures }} {{ plural(eg.failures, 'попытка', 'попытки', 'попыток') }}</span>{% else %}<span class="muted">Не запрашивался</span>{% endif %}
+{% if eg %}<span class="xs muted">FNS_MOCK · {{ eg.check.created_at|dshort }} · смоделировано</span>{% endif %}</div></div>
+
+<div class="check bordered">{{ status_dot((tr.ok and not tr.check.response.tax_arrears) if tr and tr.ok else (false if tr else none)) }}
+<div class="stack-xs" style="gap:2px"><span class="b">«Прозрачный бизнес»</span>
+{% if tr and tr.ok %}{% set r = tr.check.response %}<span>{% if r.tax_arrears %}Недоимка {{ r.tax_arrears|money }}{% else %}Недоимки нет{% endif %} · {{ r.employees }} сотр.</span>
+{% elif tr %}<span style="color:var(--red)">Не ответил: {{ tr.failures }} {{ plural(tr.failures, 'попытка', 'попытки', 'попыток') }}</span>{% else %}<span class="muted">Не запрашивался</span>{% endif %}
+{% if tr %}<span class="xs muted">FNS_MOCK · {{ tr.check.created_at|dshort }} · смоделировано</span>{% endif %}</div></div>
+
+<div class="check bordered">
+{% if bk and bk.ok %}{% set r = bk.check.response %}{% set od = r.loans|map(attribute='overdues_24m')|map('length')|sum %}{{ status_dot(od == 0) }}{% else %}{{ status_dot(none if not bk else false) }}{% endif %}
+<div class="stack-xs" style="gap:2px"><span class="b">Кредитная история</span>
+{% if bk and bk.ok %}<span>{{ r.loans|length }} {{ plural(r.loans|length, 'обязательство', 'обязательства', 'обязательств') }} · {{ r.total_balance|mln }} · {% if od %}просрочек за 24 мес.: {{ od }}{% else %}просрочек за 24 мес. нет{% endif %}</span>
+{% elif bk %}<span style="color:var(--red)">Не ответило</span>{% else %}<span class="muted">Не запрашивалась</span>{% endif %}
+{% if bk %}<span class="xs muted">BKI_MOCK · {{ bk.check.created_at|dshort }} · смоделировано</span>{% endif %}</div></div>
+
+<div class="check bordered">{% set bc = v.consents|selectattr('kind', 'equalto', 'BKI')|list|last %}{{ status_dot(true if bc and not bc.revoked_at else false) }}
+<div class="stack-xs" style="gap:2px"><span class="b">Согласия</span>
+<span>{% for c in v.consents if not c.revoked_at %}{{ {'PD': 'ПД', 'BKI': 'БКИ компании', 'BKI_GUARANTOR': 'БКИ поручителя'}[c.kind] }}{% if not loop.last %}, {% endif %}{% else %}нет{% endfor %}</span>
+{% if bc %}<span class="xs muted">БКИ действует до {{ bc.valid_until|ddate }}</span>{% endif %}</div></div>
+</div>
+{% if sc %}
+<div class="panel inline" style="gap:10px;padding:12px 14px">
+<span class="b">Жёсткие стопы:</span>
+{% if sc.knockouts %}<span style="color:var(--red)">{% for k in sc.knockouts %}{{ k.label }}{% if not loop.last %}; {% endif %}{% endfor %}</span>
+{% else %}<span>не сработали — ликвидации нет, срок работы выше минимума, действующих просрочек нет</span>{% endif %}
+</div>
+{% endif %}
+</section>
+
+<section aria-labelledby="score-h" class="card" style="gap:16px">
+<div class="between"><h2 id="score-h" class="h3">Скоринг</h2><span class="xs muted">Балльная карта {{ sc.model_version if sc else cfg.version }} · параметры синтетические</span></div>
+{% if sc %}
+{% set z1 = cfg.zones.decline_below %}{% set z3 = 100 - cfg.zones.auto_from %}{% set z2 = 100 - z1 - z3 %}
+<div class="inline" style="gap:24px">
+<div class="inline" style="gap:6px;align-items:baseline"><span style="font-size:44px;font-weight:700;line-height:1">{{ sc.score }}</span><span class="muted">из 100</span></div>
+<div style="flex:1 1 360px;gap:6px" class="stack-xs">
+<div class="zonebar" aria-hidden="true"><span class="z1" style="width:{{ z1 }}%"></span><span class="z2" style="width:{{ z2 }}%"></span><span class="z3" style="width:{{ z3 }}%"></span></div>
+<div class="zonemark" aria-hidden="true"><span style="left:{{ sc.score }}%"></span></div>
+<div class="zonelbl"><span style="width:{{ z1 }}%">0–{{ z1 - 1 }} · отказ</span><span style="width:{{ z2 }}%">{{ z1 }}–{{ cfg.zones.auto_from - 1 }} · ручной разбор</span><span style="width:{{ z3 }}%">{{ cfg.zones.auto_from }}+ · авто</span></div>
+</div>
+</div>
+<div class="stack-xs">
+<div class="factor xs muted" style="border:0"><span class="name">Фактор и значение</span><span class="viz" style="display:block">− снижает оценку · повышает +</span><span class="pts" style="font-weight:400">Баллы</span></div>
+{% for fct in sc.factors %}
+{% set w = [100, (fct.points|abs) * 4]|min %}
+<div class="factor">
+<span class="name"><strong class="m">{{ fct.label }}</strong> <span class="muted">· {{ fct.value }}</span></span>
+<span class="viz" aria-hidden="true"><span class="neg">{% if fct.points < 0 %}<i style="width:{{ w }}%"></i>{% endif %}</span><span class="pos">{% if fct.points > 0 %}<i style="width:{{ w }}%"></i>{% endif %}</span></span>
+<span class="pts {% if fct.points > 0 %}p{% elif fct.points < 0 %}n{% endif %}">{% if fct.points > 0 %}+{% elif fct.points < 0 %}−{% endif %}{{ fct.points|abs }}</span>
+</div>
+{% endfor %}
+{% set plus = sc.factors|selectattr('points', 'gt', 0)|sum(attribute='points') %}
+{% set minus = sc.factors|selectattr('points', 'lt', 0)|sum(attribute='points') %}
+<div class="xs muted" style="padding-top:8px;border-top:1px solid var(--line)">База {{ sc.base }} + {{ plus }} − {{ minus|abs }} = {{ sc.score }}. Долговая нагрузка = (долг + запрос) / (прибыль до % и налогов + амортизация).</div>
+</div>
+{% else %}
+<p class="muted">Оценки нет: {% if app.flags and app.flags.source_unavailable %}источник данных не ответил, решение принимается вручную по анкете{% else %}заявка ещё не дошла до скоринга{% endif %}.</p>
+{% endif %}
+</section>
+
+<section aria-labelledby="rule-h" class="card" style="gap:10px">
+<h2 id="rule-h" class="h3">Кредитная логика продукта</h2>
+{% if v.system_decision %}
+{% for r in v.system_decision.review_reasons or [] %}
+<div class="panel inline" style="padding:12px 14px;gap:8px 16px"><span style="flex:1 1 280px">{{ r }}</span><strong class="b">→ ручной разбор</strong></div>
+{% endfor %}
+{% elif v.decision and v.decision.source == 'SYSTEM' %}
+<div class="panel" style="padding:12px 14px">Решение системы: {{ v.label[0] }}</div>
+{% endif %}
+{% if v.hint and can_decide %}
+<div class="panel blue inline" style="padding:12px 14px;gap:8px 16px"><span style="flex:1 1 280px">Подсказка системы: {{ v.hint.text }}{% if v.hint.rate %}, ставка {{ v.hint.rate|rate }}%{% endif %}.</span>
+<a href="?d=counter#decision" class="btn" style="min-height:36px;padding:0 12px;border:0;color:var(--blue)">Подставить в решение</a></div>
+{% endif %}
+<p class="xs muted">Продукт: {{ app.product.min_amount|mln }}–{{ app.product.max_amount|mln }}, {{ app.product.min_term }}–{{ app.product.max_term }} мес., авто-лимит {{ app.product.auto_limit|mln if app.product.auto_limit else 'нет' }}{% if app.product.unsecured_max %}, без залога до {{ app.product.unsecured_max|mln }}{% endif %}, базовая ставка {{ app.product.base_rate|rate }}%.</p>
+</section>
+
+{% if v.info %}
+<section aria-labelledby="ans-h" class="card" style="gap:10px">
+<h2 id="ans-h" class="h3">Запрос клиенту</h2>
+<div class="panel stack-xs"><span class="m">{{ v.info.doc_kind }}</span><span class="small muted">Запрошено {{ v.info.created_at|dshort }} · срок {{ v.info.due_at|ddate }} · {{ {'OPEN': 'ждём ответ', 'ANSWERED': 'ответ получен', 'EXPIRED': 'срок истёк', 'CANCELLED': 'отменён'}[v.info.status] }}</span></div>
+{% if v.info.answer_comment %}<p><span class="muted">Комментарий клиента:</span> {{ v.info.answer_comment }}</p>{% endif %}
+{% for doc in v.documents %}<div class="file-row"><span class="file-ic" aria-hidden="true">{{ doc.filename.rsplit('.', 1)[-1][:4] }}</span><div class="stack-xs" style="flex:1;gap:0"><a class="m" href="/documents/{{ doc.id }}">{{ doc.filename }}</a><span class="small muted">{{ (doc.size / 1024)|round|int }} КБ · sha256 {{ doc.sha256[:8] }}…</span></div></div>{% endfor %}
+</section>
+{% endif %}
+</div>
+
+<aside class="col-side" style="flex:1 1 380px">
+{% if can_decide %}
+{% set fk = form.get('kind') or kind %}
+{% set hint_amount = v.hint.amount if v.hint and kind == 'counter' else app.amount %}
+<form id="decision" method="post" action="/bank/applications/{{ app.id }}/decision" class="card focus dec" aria-labelledby="dec-h" style="gap:16px">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<input type="hidden" name="version" value="{{ app.version }}">
+<h2 id="dec-h" class="h3" style="font-size:18px">Решение</h2>
+{% if error %}<div class="flash err" role="alert">{{ error }}{% if conflict %} <a href="/bank/applications/{{ app.id }}">Обновить</a>{% endif %}</div>{% endif %}
+{% if task and task.assigned_to and task.assigned_to != user.id %}<p class="small panel amber">Заявку разбирает {{ task.assignee.full_name }}. Если решите параллельно, сохранится только первое решение.</p>{% endif %}
+<fieldset class="seg grid">
+<legend class="sr">Тип решения</legend>
+{% for code, k in kinds.items() %}
+<input type="radio" id="k-{{ code }}" name="kind" value="{{ code }}" {% if fk == code %}checked{% endif %}><label for="k-{{ code }}">{{ k[1] }}</label>
+{% endfor %}
+</fieldset>
+
+<div class="g-terms grid2">
+<div class="field" style="grid-column:span 2;gap:4px"><label for="d-sum">Сумма, ₽</label><input id="d-sum" name="amount" class="txt" inputmode="numeric" data-money value="{{ (form.get('amount') or (hint_amount|money_input)) }}"></div>
+<div class="field" style="gap:4px"><label for="d-term">Срок, мес.</label><input id="d-term" name="term" class="txt" inputmode="numeric" value="{{ form.get('term') or app.term_months }}"></div>
+<div class="field" style="gap:4px"><label for="d-rate">Ставка, %</label><input id="d-rate" name="rate" class="txt" inputmode="decimal" value="{{ form.get('rate') or (suggested_rate|rate) }}"></div>
+</div>
+
+<div class="g-info stack-sm" style="gap:10px">
+<div class="field" style="gap:4px"><label for="d-doc">Что запросить у клиента</label>
+<select id="d-doc" name="doc_kind" class="sel">{% for dk in doc_kinds %}<option {% if form.get('doc_kind') == dk %}selected{% endif %}>{{ dk }}</option>{% endfor %}</select></div>
+<div class="field" style="gap:4px"><label for="d-icom">Пояснение для клиента</label><textarea id="d-icom" name="info_comment" rows="2" class="txt" style="font-size:15px">{{ form.get('info_comment', '') }}</textarea></div>
+<div class="field" style="gap:4px"><label for="d-due">Срок ответа, дней</label><input id="d-due" name="due_days" class="txt" inputmode="numeric" value="{{ form.get('due_days') or 7 }}"></div>
+</div>
+
+<fieldset class="g-reasons stack-sm">
+<legend class="m" style="margin-bottom:8px">Причины для клиента</legend>
+{% set chosen = form.get('reasons') or (v.system_decision.reason_codes if v.system_decision else []) %}
+{% for code, r in reasons.items() %}
+<label class="cb" style="align-items:center;min-height:32px"><input type="checkbox" name="reasons" value="{{ code }}" style="width:18px;height:18px;margin:0" {% if code in chosen %}checked{% endif %}>{{ r.title }}</label>
+{% endfor %}
+<span class="xs muted">Клиент видит категорию и подсказку, что изменить, но не пороги и баллы</span>
+</fieldset>
+
+<div class="field" style="gap:4px">
+<label for="d-com">Комментарий <span style="color:var(--red)">*</span></label>
+<textarea id="d-com" name="comment" rows="3" class="txt" style="font-size:15px" required>{{ form.get('comment', '') }}</textarea>
+<span class="xs muted">Попадёт в журнал, клиенту не показывается</span>
+</div>
+<button type="submit" class="btn primary" style="min-height:52px;font-size:16px">
+<span class="l-approve">Одобрить заявку</span><span class="l-counter">Отправить предложение</span><span class="l-info">Запросить у клиента</span><span class="l-decline">Отказать</span></button>
+<span class="xs muted" style="text-align:center">Если заявку параллельно решил другой аналитик, система покажет конфликт и не сохранит второе решение</span>
+</form>
+{% else %}
+<section class="card" style="gap:10px">
+<h2 class="h3">Решение</h2>
+{% if v.decision %}
+<p><span class="b">{{ v.label[0] }}</span> · {{ 'система' if v.decision.source == 'SYSTEM' else 'аналитик' }} · {{ v.decision.created_at|dshort }}</p>
+{% if v.offer and app.status not in ('DECLINED',) %}<p class="small">{{ v.offer.amount|money }} · {{ v.offer.term_months }} мес. · {{ v.offer.rate|rate }}% · до {{ v.offer.valid_until|ddate }} ({{ {'ACTIVE': 'активно', 'ACCEPTED': 'принято', 'REJECTED': 'отклонено', 'EXPIRED': 'истекло'}[v.offer.status] }})</p>{% endif %}
+{% if v.reasons %}<p class="small muted">Причины для клиента: {{ v.reasons|map(attribute='title')|join(', ') }}</p>{% endif %}
+{% if v.decision.comment %}<p class="small panel">{{ v.decision.comment }}</p>{% endif %}
+{% elif app.status == 'NEEDS_INFO' %}<p class="muted">Ждём ответ клиента. После ответа заявка вернётся в очередь.</p>
+{% else %}<p class="muted">Решение принимается только в статусе «На разборе».</p>{% endif %}
+</section>
+{% endif %}
+
+<section aria-labelledby="j-h" class="card" style="gap:10px">
+<h2 id="j-h" class="h3">Журнал статусов</h2>
+<ol class="journal">
+{% for h in v.journal %}
+<li><code>{{ h.from_status or '∅' }} → {{ h.to_status }}</code><span class="muted">{{ h.created_at|dshort }} · {{ h.actor_name }}{% if h.reason %} · {{ h.reason }}{% endif %}</span></li>
+{% endfor %}
+</ol>
+</section>
+</aside>
+</div>
+{% endblock %}

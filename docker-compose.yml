@@ -1,0 +1,83 @@
+# Запуск всего стека одной командой:  docker compose up --build
+# Открыть: http://localhost:8000  (API и Swagger: http://localhost:8000/api/docs)
+# LLM с открытыми весами (необязательно):  docker compose --profile llm up --build
+
+name: kreditnyi-kabinet
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql+psycopg://kabinet:${POSTGRES_PASSWORD:-kabinet}@db:5432/kabinet
+  SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+  FNS_MOCK_URL: http://fns-mock:8101
+  BKI_MOCK_URL: http://bki-mock:8102
+  UPLOAD_DIR: /data/uploads
+  LLM_URL: ${LLM_URL:-}
+  LLM_MODEL: ${LLM_MODEL:-qwen2.5:1.5b}
+  PIPELINE_STEP_DELAY: ${PIPELINE_STEP_DELAY:-0.8}
+
+services:
+  db:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_DB: kabinet
+      POSTGRES_USER: kabinet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kabinet}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kabinet -d kabinet"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  fns-mock:
+    build: { context: ., dockerfile: mocks/Dockerfile }
+    image: kreditnyi-kabinet-mocks:0.1.0
+    environment:
+      PORT: "8101"
+      FNS_FAIL_RATE: ${FNS_FAIL_RATE:-0}
+    command: ["sh", "-c", "uvicorn mocks.fns:app --host 0.0.0.0 --port 8101"]
+
+  bki-mock:
+    build: { context: ., dockerfile: mocks/Dockerfile }
+    image: kreditnyi-kabinet-mocks:0.1.0
+    environment:
+      PORT: "8102"
+      BKI_FAIL_RATE: ${BKI_FAIL_RATE:-0}
+    command: ["sh", "-c", "uvicorn mocks.bki:app --host 0.0.0.0 --port 8102"]
+
+  app:
+    build: .
+    image: kreditnyi-kabinet-app:0.1.0
+    environment: *app-env
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      db: { condition: service_healthy }
+      fns-mock: { condition: service_healthy }
+      bki-mock: { condition: service_healthy }
+
+  worker:
+    build: .
+    image: kreditnyi-kabinet-app:0.1.0
+    environment: *app-env
+    command: ["python", "-m", "app.worker"]
+    healthcheck:
+      disable: true
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      app: { condition: service_healthy }  # миграции и сиды выполняет app
+
+  ollama:
+    profiles: ["llm"]
+    image: ollama/ollama:0.6.2
+    volumes:
+      - ollama:/root/.ollama
+    entrypoint: ["sh", "-c", "ollama serve & sleep 3 && ollama pull ${LLM_MODEL:-qwen2.5:1.5b} && wait"]
+
+volumes:
+  pgdata:
+  uploads:
+  ollama:

@@ -1,0 +1,12 @@
+<section id="stages" aria-label="Этапы заявки" class="card"
+  {% if live %}hx-get="/applications/{{ app.id }}/live?since={{ app.status }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+<ol class="stages">
+{% for s in v.stages %}
+<li class="{{ s.state }}" {% if s.state in ('current', 'problem') %}aria-current="step"{% endif %}>
+<span class="bar" aria-hidden="true"></span>
+<span class="n">{{ s.name }}</span>
+<span class="t">{% if s.state == 'problem' and app.status == 'NEEDS_INFO' %}Ждём ваш ответ{% elif s.state == 'problem' and app.status == 'NEEDS_CORRECTION' %}Нужно исправить{% elif s.state == 'current' and live %}<span class="spinner" aria-hidden="true"></span> идёт{% elif s.at %}{{ s.at|dshort }}{% else %}—{% endif %}</span>
+</li>
+{% endfor %}
+</ol>
+</section>

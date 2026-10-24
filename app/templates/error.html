@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Ошибка · Кредитный кабинет{% endblock %}
+{% block body %}
+<main class="login">
+<div class="card lg">
+<span class="muted">Ошибка {{ code }}</span>
+<h1 class="h2">{{ message }}</h1>
+<a class="btn self-start" href="/">На главную</a>
+</div>
+</main>
+{% endblock %}

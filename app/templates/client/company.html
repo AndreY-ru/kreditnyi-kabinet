@@ -1,0 +1,46 @@
+{% extends "client/base.html" %}
+{% block title %}Компания · Кредитный кабинет{% endblock %}
+{% block main %}
+<div class="stack-xs">
+<a href="/cabinet" style="font-size:14px;text-decoration:none">← Мои заявки</a>
+<h1 class="h1">Компании</h1>
+</div>
+<div class="row">
+<div class="col-main">
+{% for c in companies %}
+<section class="card">
+<div class="between"><h2 class="h3">{{ c.name }}</h2>
+{% if company and c.id == company.id %}<span class="pill sm dark">Выбрана</span>{% else %}
+<form method="post" action="/company/switch"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="company_id" value="{{ c.id }}"><button class="btn" type="submit">Перейти</button></form>{% endif %}
+</div>
+<dl class="facts c3">
+<div><dt>ИНН / ОГРН</dt><dd>{{ c.inn }} / {{ c.ogrn or '—' }}</dd></div>
+<div><dt>Руководитель</dt><dd>{{ c.director or '—' }}</dd></div>
+<div><dt>Регистрация</dt><dd>{{ c.registered_at|ddate }} · {{ c.registered_at|years_since }}</dd></div>
+<div><dt>Адрес</dt><dd>{{ c.address or '—' }}</dd></div>
+<div><dt>ОКВЭД</dt><dd>{{ c.okved }} {{ c.okved_name or '' }}</dd></div>
+<div><dt>Статус</dt><dd>{% if c.status == 'ACTIVE' %}Действует{% elif c.status == 'LIQUIDATING' %}В процессе ликвидации{% else %}{{ c.status }}{% endif %}</dd></div>
+</dl>
+<p class="xs muted">Данные из ЕГРЮЛ (смоделировано), обновлено {{ c.egrul_fetched_at|dt }}</p>
+</section>
+{% else %}
+<section class="card"><p class="muted">Пока нет ни одной компании.</p></section>
+{% endfor %}
+</div>
+<aside class="col-side">
+<form class="card" method="post" action="/company/add">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<h2 class="h3">Добавить компанию по ИНН</h2>
+<p class="small muted">Название, адрес, руководителя и виды деятельности подставим из реестра — вводить вручную не нужно.</p>
+<div class="field">
+<label for="inn">ИНН</label>
+<input class="txt" id="inn" name="inn" inputmode="numeric" maxlength="12" value="{{ inn }}" {% if error %}aria-invalid="true" aria-describedby="inn-err"{% endif %} required>
+{% if error %}<span id="inn-err" class="err">{{ error }}</span>{% endif %}
+<span class="hint">Например, 7724112230 (синтетическая компания)</span>
+</div>
+<div class="field"><label for="position">Ваша должность</label><input class="txt" id="position" name="position" value="Финансовый директор"></div>
+<button class="btn primary" type="submit">Найти и добавить</button>
+</form>
+</aside>
+</div>
+{% endblock %}

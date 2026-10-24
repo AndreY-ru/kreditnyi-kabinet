@@ -1,0 +1,46 @@
+{% if not matches %}
+<section class="card"><span class="h3">Укажите сумму, чтобы подобрать продукт</span></section>
+{% else %}
+<h2 class="h2" style="margin-top:8px">Подходит под вашу задачу · {{ matches|selectattr('eligible')|list|length }} {{ plural(matches|selectattr('eligible')|list|length, 'продукт', 'продукта', 'продуктов') }}</h2>
+{% for m in matches %}
+{% set pr = m.product %}
+<article class="card" style="{% if loop.first and m.eligible %}border:2px solid var(--ink);gap:16px{% else %}border:1px solid var(--line){% endif %}">
+<div class="between">
+<h3 class="{% if loop.first %}h2{% else %}h3{% endif %}" style="font-size:{% if loop.first %}20px{% else %}18px{% endif %}">{{ pr.name }}</h3>
+<span class="inline" style="gap:8px">
+{% if pr.gov_support %}<span class="pill sm blue">Льготная ставка</span>{% endif %}
+{% if loop.first and m.eligible %}<span class="pill sm dark">Лучше всего подходит</span>{% elif not m.eligible %}<span class="pill sm neutral">Не подходит</span>{% endif %}
+</span>
+</div>
+<div class="grid4">
+<div class="stack-xs" style="gap:0"><span class="xs muted">Сумма</span><span class="b">до {{ pr.max_amount|mln }}</span></div>
+<div class="stack-xs" style="gap:0"><span class="xs muted">Срок</span><span class="b">до {{ pr.max_term }} мес.</span></div>
+<div class="stack-xs" style="gap:0"><span class="xs muted">Ставка</span><span class="b">от {{ pr.base_rate|rate }}%*</span></div>
+<div class="stack-xs" style="gap:0"><span class="xs muted">Решение</span><span class="b">до {{ pr.decision_days }} {{ plural(pr.decision_days, 'дня', 'дней', 'дней') }}</span></div>
+</div>
+{% if m.reasons or m.warnings %}
+<ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px;color:var(--ink2)">
+{% for r in m.reasons %}<li>{{ r }}</li>{% endfor %}
+{% for w in m.warnings %}<li><strong class="b" style="color:var(--amber)">{{ w }}</strong></li>{% endfor %}
+</ul>
+{% endif %}
+<form method="post" action="/applications/new" class="inline">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<input type="hidden" name="product_id" value="{{ pr.id }}">
+<input type="hidden" name="goal" value="{{ p.goal }}">
+<input type="hidden" name="amount" value="{{ p.amount }}">
+<input type="hidden" name="term" value="{{ p.term }}">
+{% if p.collateral %}<input type="hidden" name="collateral" value="1">{% endif %}
+{% if p.guarantor %}<input type="hidden" name="guarantor" value="1">{% endif %}
+{% if draft %}<input type="hidden" name="app_id" value="{{ draft.id }}">{% endif %}
+{% if m.eligible %}
+<button type="submit" class="btn {% if loop.first %}primary lg{% endif %}">{% if draft %}Выбрать и продолжить{% elif loop.first %}Оформить заявку{% else %}Выбрать этот продукт{% endif %}</button>
+{% if loop.first %}<span class="small muted">Данные компании подставим из ЕГРЮЛ</span>{% endif %}
+{% else %}
+<button type="button" class="btn" disabled>Измените параметры</button>
+{% endif %}
+</form>
+</article>
+{% endfor %}
+<p class="xs muted">* Ставки и лимиты синтетические, для демонстрации. Итоговая ставка зависит от оценки заявки.</p>
+{% endif %}
