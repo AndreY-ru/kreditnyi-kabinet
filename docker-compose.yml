@@ -73,6 +73,8 @@ services:
   ollama:
     profiles: ["llm"]
     image: ollama/ollama:0.40.11
+    environment:
+      OLLAMA_CONTEXT_LENGTH: "2048"  # как в запросах приложения: иначе первый запрос перезагрузит модель
     volumes:
       - ollama:/root/.ollama
     # скачать модель и сразу загрузить её в память, чтобы первый запрос не ждал
