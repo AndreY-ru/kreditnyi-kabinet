@@ -45,7 +45,7 @@ class Settings:
 
     # LLM с открытыми весами (необязательно). Пусто = правила и шаблоны без модели.
     llm_url: str | None = field(default_factory=lambda: os.getenv("LLM_URL") or None)
-    llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "qwen3:4b-instruct"))
+    llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "qwen3:4b-instruct-2507-q4_K_M"))
     llm_timeout: float = field(default_factory=lambda: float(os.getenv("LLM_TIMEOUT", "30")))
 
     display_tz: str = field(default_factory=lambda: os.getenv("DISPLAY_TZ", "Europe/Moscow"))

@@ -1,6 +1,6 @@
 # Запуск всего стека одной командой:  docker compose up --build
 # Открыть: http://localhost:8000  (API и Swagger: http://localhost:8000/api/docs)
-# LLM с открытыми весами (необязательно):  LLM_URL=http://ollama:11434 docker compose --profile llm up --build
+# С LLM (необязательно):  docker compose --profile llm up --build  — модель скачается и загрузится сама
 
 name: kreditnyi-kabinet
 
@@ -10,8 +10,10 @@ x-app-env: &app-env
   FNS_MOCK_URL: http://fns-mock:8101
   BKI_MOCK_URL: http://bki-mock:8102
   UPLOAD_DIR: /data/uploads
-  LLM_URL: ${LLM_URL:-}
-  LLM_MODEL: ${LLM_MODEL:-qwen3:4b-instruct}
+  # Без профиля llm контейнера ollama нет: приложение за доли секунды понимает это и работает на правилах.
+  # LLM_URL= (пусто) в .env — отключить модель совсем.
+  LLM_URL: ${LLM_URL-http://ollama:11434}
+  LLM_MODEL: ${LLM_MODEL:-qwen3:4b-instruct-2507-q4_K_M}
   PIPELINE_STEP_DELAY: ${PIPELINE_STEP_DELAY:-0.8}
 
 services:
@@ -78,7 +80,7 @@ services:
     volumes:
       - ollama:/root/.ollama
     # скачать модель и сразу загрузить её в память, чтобы первый запрос не ждал
-    entrypoint: ["sh", "-c", "ollama serve & sleep 3 && ollama pull ${LLM_MODEL:-qwen3:4b-instruct} && ollama run ${LLM_MODEL:-qwen3:4b-instruct} --think=false --keepalive 60m ok >/dev/null; wait"]
+    entrypoint: ["sh", "-c", "ollama serve & sleep 3 && ollama pull ${LLM_MODEL:-qwen3:4b-instruct-2507-q4_K_M} && ollama run ${LLM_MODEL:-qwen3:4b-instruct-2507-q4_K_M} --think=false --keepalive 60m ok >/dev/null; wait"]
 
 volumes:
   pgdata:
