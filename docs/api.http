@@ -16,6 +16,21 @@ Content-Type: application/json
 
 {"goal": "working", "amount": 1000000, "term_months": 12, "has_guarantor": true, "company_id": 1}
 
+### Проверка шансов до подачи (без БКИ и без записи в БД; финансы можно не передавать — подставим)
+POST {{base}}/api/companies/1/precheck
+Content-Type: application/json
+
+{"goal": "equipment", "amount": 25000000, "term_months": 36, "has_guarantor": true}
+
+### Команда компании
+GET {{base}}/api/companies/1/members
+
+### Подключить чужую компанию по ИНН нельзя (403 company_taken); свободная синтетическая — 7713550120
+POST {{base}}/api/companies
+Content-Type: application/json
+
+{"inn": "7713550120", "position": "Финансовый директор"}
+
 ### Черновик заявки
 POST {{base}}/api/applications
 Content-Type: application/json
@@ -43,6 +58,9 @@ Idempotency-Key: 6c1f0a1e-demo
 GET {{base}}/api/applications/9
 ###
 GET {{base}}/api/applications/9/history
+
+### Подписать договор может только участник с правом подписи (Анна — 403, Игорь — 200)
+POST {{base}}/api/applications/9/sign
 
 ### --- Банк ---
 POST {{base}}/api/auth/login

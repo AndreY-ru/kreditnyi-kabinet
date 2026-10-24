@@ -262,6 +262,156 @@
                 }
             }
         },
+        "/api/companies/{company_id}/precheck": {
+            "post": {
+                "tags": [
+                    "companies"
+                ],
+                "summary": "Company Precheck",
+                "description": "Шансы до подачи: та же модель, что в конвейере, но без БКИ и без записи в БД. Баллы и пороги не раскрываются.",
+                "operationId": "company_precheck_api_companies__company_id__precheck_post",
+                "parameters": [
+                    {
+                        "name": "company_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "title": "Company Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PrecheckIn"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PrecheckOut"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/companies/{company_id}/members": {
+            "get": {
+                "tags": [
+                    "companies"
+                ],
+                "summary": "Company Members",
+                "operationId": "company_members_api_companies__company_id__members_get",
+                "parameters": [
+                    {
+                        "name": "company_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "title": "Company Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/MemberOut"
+                                    },
+                                    "title": "Response Company Members Api Companies  Company Id  Members Get"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "companies"
+                ],
+                "summary": "Company Invite",
+                "description": "Руководитель (право подписи) добавляет коллегу. Подключиться к чужой компании по ИНН нельзя.",
+                "operationId": "company_invite_api_companies__company_id__members_post",
+                "parameters": [
+                    {
+                        "name": "company_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "title": "Company Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MemberIn"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MemberOut"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/applications": {
             "get": {
                 "tags": [
@@ -2274,6 +2424,67 @@
                 ],
                 "title": "MatchOut"
             },
+            "MemberIn": {
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "title": "Email"
+                    },
+                    "position": {
+                        "type": "string",
+                        "title": "Position",
+                        "default": "Сотрудник"
+                    },
+                    "can_apply": {
+                        "type": "boolean",
+                        "title": "Can Apply",
+                        "default": true
+                    },
+                    "can_sign": {
+                        "type": "boolean",
+                        "title": "Can Sign",
+                        "default": false
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "email"
+                ],
+                "title": "MemberIn"
+            },
+            "MemberOut": {
+                "properties": {
+                    "user_id": {
+                        "type": "integer",
+                        "title": "User Id"
+                    },
+                    "full_name": {
+                        "type": "string",
+                        "title": "Full Name"
+                    },
+                    "position": {
+                        "type": "string",
+                        "title": "Position"
+                    },
+                    "can_apply": {
+                        "type": "boolean",
+                        "title": "Can Apply"
+                    },
+                    "can_sign": {
+                        "type": "boolean",
+                        "title": "Can Sign"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "user_id",
+                    "full_name",
+                    "position",
+                    "can_apply",
+                    "can_sign"
+                ],
+                "title": "MemberOut"
+            },
             "OfferOut": {
                 "properties": {
                     "id": {
@@ -2318,6 +2529,234 @@
                     "status"
                 ],
                 "title": "OfferOut"
+            },
+            "PrecheckFactor": {
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "title": "Title"
+                    },
+                    "tone": {
+                        "type": "string",
+                        "enum": [
+                            "ok",
+                            "warn",
+                            "bad",
+                            "na"
+                        ],
+                        "title": "Tone"
+                    },
+                    "text": {
+                        "type": "string",
+                        "title": "Text"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "title",
+                    "tone",
+                    "text"
+                ],
+                "title": "PrecheckFactor"
+            },
+            "PrecheckIn": {
+                "properties": {
+                    "goal": {
+                        "type": "string",
+                        "enum": [
+                            "working",
+                            "equipment",
+                            "cash_gap",
+                            "new_direction",
+                            "refinance"
+                        ],
+                        "title": "Goal",
+                        "default": "working"
+                    },
+                    "amount": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0.0,
+                        "title": "Amount"
+                    },
+                    "term_months": {
+                        "type": "integer",
+                        "maximum": 120.0,
+                        "exclusiveMinimum": 0.0,
+                        "title": "Term Months"
+                    },
+                    "has_collateral": {
+                        "type": "boolean",
+                        "title": "Has Collateral",
+                        "default": false
+                    },
+                    "has_guarantor": {
+                        "type": "boolean",
+                        "title": "Has Guarantor",
+                        "default": true
+                    },
+                    "revenue": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "minimum": 0.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Revenue",
+                        "description": "Не указано — подставим из прошлой заявки или ФНС"
+                    },
+                    "profit": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Profit",
+                        "description": "Прибыль до процентов и налогов, примерно"
+                    },
+                    "debt": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "minimum": 0.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Debt",
+                        "description": "Остаток по действующим кредитам и лизингу"
+                    },
+                    "revenue_trend": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "GROWTH",
+                                    "FLAT",
+                                    "DECLINE"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Revenue Trend"
+                    },
+                    "overdues": {
+                        "type": "string",
+                        "enum": [
+                            "none",
+                            "minor",
+                            "current"
+                        ],
+                        "title": "Overdues",
+                        "description": "Просрочки за 2 года со слов клиента; в БКИ до согласия не ходим",
+                        "default": "none"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "amount",
+                    "term_months"
+                ],
+                "title": "PrecheckIn"
+            },
+            "PrecheckOut": {
+                "properties": {
+                    "level": {
+                        "type": "string",
+                        "enum": [
+                            "high",
+                            "medium",
+                            "low"
+                        ],
+                        "title": "Level"
+                    },
+                    "factors": {
+                        "items": {
+                            "$ref": "#/components/schemas/PrecheckFactor"
+                        },
+                        "type": "array",
+                        "title": "Factors"
+                    },
+                    "products": {
+                        "items": {
+                            "$ref": "#/components/schemas/PrecheckProduct"
+                        },
+                        "type": "array",
+                        "title": "Products"
+                    },
+                    "tips": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array",
+                        "title": "Tips"
+                    },
+                    "comfortable_amount": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Comfortable Amount"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "level",
+                    "factors",
+                    "products",
+                    "tips",
+                    "comfortable_amount"
+                ],
+                "title": "PrecheckOut"
+            },
+            "PrecheckProduct": {
+                "properties": {
+                    "product_id": {
+                        "type": "integer",
+                        "title": "Product Id"
+                    },
+                    "name": {
+                        "type": "string",
+                        "title": "Name"
+                    },
+                    "verdict": {
+                        "type": "string",
+                        "enum": [
+                            "auto",
+                            "review",
+                            "low",
+                            "unfit"
+                        ],
+                        "title": "Verdict"
+                    },
+                    "notes": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array",
+                        "title": "Notes"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "product_id",
+                    "name",
+                    "verdict",
+                    "notes"
+                ],
+                "title": "PrecheckProduct"
             },
             "ProductOut": {
                 "properties": {
