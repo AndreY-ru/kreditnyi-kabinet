@@ -43,10 +43,10 @@ class Settings:
     upload_dir: str = field(default_factory=lambda: os.getenv("UPLOAD_DIR", "./data/uploads"))
     max_upload_mb: int = field(default_factory=lambda: int(os.getenv("MAX_UPLOAD_MB", "20")))
 
-    # LLM с открытыми весами (необязательно). Пусто = только детерминированный текст.
+    # LLM с открытыми весами (необязательно). Пусто = правила и шаблоны без модели.
     llm_url: str | None = field(default_factory=lambda: os.getenv("LLM_URL") or None)
-    llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "qwen2.5:1.5b"))
-    llm_timeout: float = field(default_factory=lambda: float(os.getenv("LLM_TIMEOUT", "20")))
+    llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "qwen3:4b-instruct"))
+    llm_timeout: float = field(default_factory=lambda: float(os.getenv("LLM_TIMEOUT", "30")))
 
     display_tz: str = field(default_factory=lambda: os.getenv("DISPLAY_TZ", "Europe/Moscow"))
 

@@ -31,6 +31,12 @@ Content-Type: application/json
 
 {"inn": "7713550120", "position": "Финансовый директор"}
 
+### Подбор по описанию своими словами (модель, если включена; иначе правила)
+POST {{base}}/api/podbor/parse
+Content-Type: application/json
+
+{"text": "Нужно 3 млн на закупку товара к сезону, отдам за полгода, есть грузовик в залог"}
+
 ### Черновик заявки
 POST {{base}}/api/applications
 Content-Type: application/json
@@ -73,6 +79,12 @@ GET {{base}}/api/bank/queue?tab=unassigned
 
 ### Карточка заявки
 GET {{base}}/api/bank/applications/2
+
+### Черновик пояснения для клиента по короткой заметке аналитика (ничего не отправляет)
+POST {{base}}/api/bank/applications/2/client-message
+Content-Type: application/json
+
+{"note": "нужна ОСВ 62, выручка не бьётся с БКИ", "doc_kind": "Оборотно-сальдовая ведомость по счёту 62"}
 
 ### Встречное предложение (expected_version из карточки)
 POST {{base}}/api/bank/applications/2/decision

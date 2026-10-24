@@ -152,6 +152,48 @@
                 }
             }
         },
+        "/api/podbor/parse": {
+            "post": {
+                "tags": [
+                    "catalog"
+                ],
+                "summary": "Podbor Parse",
+                "description": "Задача своими словами → параметры подбора. Модель (если включена) понимает контекст, но числа берёт\nтолько из текста; без модели — правила. Дальше — обычный /products/match.",
+                "operationId": "podbor_parse_api_podbor_parse_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/IntakeIn"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IntakeOut"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/companies": {
             "get": {
                 "tags": [
@@ -1288,6 +1330,59 @@
                 }
             }
         },
+        "/api/bank/applications/{app_id}/client-message": {
+            "post": {
+                "tags": [
+                    "bank"
+                ],
+                "summary": "Bank Client Message",
+                "description": "Черновик пояснения для клиента по короткой заметке аналитика. Ничего не отправляет и не сохраняет.",
+                "operationId": "bank_client_message_api_bank_applications__app_id__client_message_post",
+                "parameters": [
+                    {
+                        "name": "app_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "title": "App Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ClientMessageIn"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ClientMessageOut"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/bank/metrics": {
             "get": {
                 "tags": [
@@ -1743,6 +1838,61 @@
                 },
                 "type": "object",
                 "title": "Body_info_response_api_applications__app_id__info_response_post"
+            },
+            "ClientMessageIn": {
+                "properties": {
+                    "note": {
+                        "type": "string",
+                        "maxLength": 500,
+                        "title": "Note",
+                        "description": "Коротко, для себя: «нужна ОСВ 62, выручка не бьётся с БКИ»"
+                    },
+                    "doc_kind": {
+                        "type": "string",
+                        "maxLength": 255,
+                        "title": "Doc Kind"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "note",
+                    "doc_kind"
+                ],
+                "title": "ClientMessageIn"
+            },
+            "ClientMessageOut": {
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "title": "Text"
+                    },
+                    "source": {
+                        "type": "string",
+                        "enum": [
+                            "llm",
+                            "template"
+                        ],
+                        "title": "Source"
+                    },
+                    "rejected": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rejected",
+                        "description": "Почему черновик модели не подошёл"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "text",
+                    "source"
+                ],
+                "title": "ClientMessageOut"
             },
             "CompanyIn": {
                 "properties": {
@@ -2275,6 +2425,120 @@
                     "created_at"
                 ],
                 "title": "HistoryOut"
+            },
+            "IntakeIn": {
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "maxLength": 1000,
+                        "minLength": 1,
+                        "title": "Text",
+                        "description": "Задача своими словами"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "text"
+                ],
+                "title": "IntakeIn"
+            },
+            "IntakeOut": {
+                "properties": {
+                    "goal": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "working",
+                                    "equipment",
+                                    "cash_gap",
+                                    "new_direction",
+                                    "refinance"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Goal"
+                    },
+                    "amount": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Amount"
+                    },
+                    "term_months": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Term Months"
+                    },
+                    "has_collateral": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Has Collateral"
+                    },
+                    "has_guarantor": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Has Guarantor"
+                    },
+                    "source": {
+                        "type": "string",
+                        "enum": [
+                            "llm",
+                            "rules"
+                        ],
+                        "title": "Source",
+                        "description": "llm — модель (числа сверены с текстом), rules — правила"
+                    },
+                    "missing": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array",
+                        "title": "Missing"
+                    },
+                    "summary": {
+                        "type": "string",
+                        "title": "Summary"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "goal",
+                    "amount",
+                    "term_months",
+                    "has_collateral",
+                    "has_guarantor",
+                    "source",
+                    "missing",
+                    "summary"
+                ],
+                "title": "IntakeOut"
             },
             "LiabilityIn": {
                 "properties": {

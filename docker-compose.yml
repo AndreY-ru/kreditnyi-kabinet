@@ -1,6 +1,6 @@
 # Запуск всего стека одной командой:  docker compose up --build
 # Открыть: http://localhost:8000  (API и Swagger: http://localhost:8000/api/docs)
-# LLM с открытыми весами (необязательно):  docker compose --profile llm up --build
+# LLM с открытыми весами (необязательно):  LLM_URL=http://ollama:11434 docker compose --profile llm up --build
 
 name: kreditnyi-kabinet
 
@@ -11,7 +11,7 @@ x-app-env: &app-env
   BKI_MOCK_URL: http://bki-mock:8102
   UPLOAD_DIR: /data/uploads
   LLM_URL: ${LLM_URL:-}
-  LLM_MODEL: ${LLM_MODEL:-qwen2.5:1.5b}
+  LLM_MODEL: ${LLM_MODEL:-qwen3:4b-instruct}
   PIPELINE_STEP_DELAY: ${PIPELINE_STEP_DELAY:-0.8}
 
 services:
@@ -72,10 +72,11 @@ services:
 
   ollama:
     profiles: ["llm"]
-    image: ollama/ollama:0.6.2
+    image: ollama/ollama:0.40.11
     volumes:
       - ollama:/root/.ollama
-    entrypoint: ["sh", "-c", "ollama serve & sleep 3 && ollama pull ${LLM_MODEL:-qwen2.5:1.5b} && wait"]
+    # скачать модель и сразу загрузить её в память, чтобы первый запрос не ждал
+    entrypoint: ["sh", "-c", "ollama serve & sleep 3 && ollama pull ${LLM_MODEL:-qwen3:4b-instruct} && ollama run ${LLM_MODEL:-qwen3:4b-instruct} --think=false --keepalive 60m ok >/dev/null; wait"]
 
 volumes:
   pgdata:
