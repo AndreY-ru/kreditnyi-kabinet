@@ -1,7 +1,7 @@
 """Демо-данные: то, что жюри увидит сразу после docker compose up."""
 from __future__ import annotations
 
-from app.models import Application, User
+from app.models import Application, Company, User
 from app.seed import seed_applications
 from app.services.analyst import process_metrics, queue_counts
 
@@ -23,3 +23,9 @@ def test_seed_statuses_and_realistic_timeline(db):
 
     seed_applications(db)  # идемпотентно
     assert db.query(Application).count() == 8
+
+
+def test_every_demo_company_has_someone_who_can_sign(db):
+    """Иначе одобренная заявка застрянет на подписании: подписать договор некому."""
+    for c in db.query(Company).filter(Company.members.any()):
+        assert any(m.can_sign for m in c.members), c.name
