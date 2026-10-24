@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -13,11 +14,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import SessionLocal, get_engine
-from app.models import Company, CompanyMember, Product, ScoringModel, User
+from app.models import Company, CompanyMember, Product, ScoringModel, User, clock_shift
 from app.security import hash_password
 from app.services import analyst as an
 from app.services import applications as svc
-from app.services.companies import add_company_by_inn, add_member, add_member
+from app.services.companies import add_company_by_inn, add_member
 from app.services.scoring import DEFAULT_MODEL
 from app.worker import run_pending
 
@@ -160,59 +161,86 @@ def seed_applications(db: Session) -> None:
         return
     maria = _user(db, "maria@bank.local")
     sv = dict(revenue=84_600_000, expenses=76_900_000, ebit=6_200_000, amort=300_000, trend="GROWTH", liabs=SV_LIABS)
+    # Заявки «живут» в последние трое суток (часов назад), иначе на странице «Процесс» время на этапах ≈ 0 с.
 
-    # 1. Овердрафт: авто-одобрение → выдан
-    anna, a1 = _draft(db, "anna@demo.local", "7701234560", "OVERDRAFT", 1_500_000, 12, "cash_gap", guarantor=False, **sv)
-    _submit(db, anna, a1)
-    svc.accept_offer(db, a1, anna)
-    igor = _user(db, "igor@demo.local")
-    svc.sign(db, a1, igor)
-    db.commit()
+    # 1. Овердрафт: авто-одобрение → выдан. Готовит Анна, подписывает Игорь (право подписи)
+    with _ago(72):
+        anna, a1 = _draft(db, "anna@demo.local", "7701234560", "OVERDRAFT", 1_500_000, 12, "cash_gap",
+                          guarantor=False, **sv)
+    with _ago(71.6):
+        _submit(db, anna, a1)
+    with _ago(70.9):
+        svc.accept_offer(db, a1, anna)
+        db.commit()
+    with _ago(68):
+        svc.sign(db, a1, _user(db, "igor@demo.local"))
+        db.commit()
 
     # 2. Кредитная линия 12 млн: ручной разбор (выше авто-лимита и лимита без залога), у Марии
-    anna, a2 = _draft(db, "anna@demo.local", "7701234560", "CREDIT_LINE", 12_000_000, 36, "equipment", **sv)
-    _submit(db, anna, a2)
-    an.take(db, a2, maria)
-    db.commit()
+    with _ago(5.5):
+        anna, a2 = _draft(db, "anna@demo.local", "7701234560", "CREDIT_LINE", 12_000_000, 36, "equipment", **sv)
+    with _ago(5):
+        _submit(db, anna, a2)
+    with _ago(4.6):
+        an.take(db, a2, maria)
+        db.commit()
 
     # 3. Оборотный 5 млн: ручной разбор → запрос данных (баннер на главной клиента)
-    anna, a3 = _draft(db, "anna@demo.local", "7701234560", "WORKING", 5_000_000, 24, "working", **sv)
-    _submit(db, anna, a3)
-    an.take(db, a3, maria)
-    an.decide(db, a3, maria, kind="info", expected_version=a3.version,
-              comment="Резкий рост выручки, нужно подтвердить расчёты с покупателями",
-              doc_kind="Оборотно-сальдовая ведомость по счёту 62",
-              info_comment="Выручка за год выросла заметно сильнее, чем в прошлых периодах. Ведомость поможет подтвердить расчёты с покупателями.")
-    db.commit()
+    with _ago(28):
+        anna, a3 = _draft(db, "anna@demo.local", "7701234560", "WORKING", 5_000_000, 24, "working", **sv)
+    with _ago(27.5):
+        _submit(db, anna, a3)
+    with _ago(26):
+        an.take(db, a3, maria)
+    with _ago(24.8):
+        an.decide(db, a3, maria, kind="info", expected_version=a3.version,
+                  comment="Резкий рост выручки, нужно подтвердить расчёты с покупателями",
+                  doc_kind="Оборотно-сальдовая ведомость по счёту 62",
+                  info_comment="Выручка за год выросла заметно сильнее, чем в прошлых периодах. Ведомость поможет подтвердить расчёты с покупателями.")
+        db.commit()
 
     # 4. Черновик: кредит на развитие
-    _draft(db, "anna@demo.local", "7701234560", "DEVELOPMENT", 3_000_000, 18, "new_direction",
-           revenue=84_600_000, expenses=None, ebit=None, amort=None, trend=None, liabs=SV_LIABS)  # type: ignore[arg-type]
-    db.commit()
+    with _ago(2):
+        _draft(db, "anna@demo.local", "7701234560", "DEVELOPMENT", 3_000_000, 18, "new_direction",
+               revenue=84_600_000, expenses=None, ebit=None, amort=None, trend=None, liabs=SV_LIABS)  # type: ignore[arg-type]
+        db.commit()
 
-    # 5. Пекарня: налоговая недоимка → ручной разбор, не назначена
-    orlova, a5 = _draft(db, "orlova@demo.local", "5401987658", "WORKING", 2_500_000, 18, "working",
-                        revenue=41_000_000, expenses=37_500_000, ebit=3_400_000, amort=500_000, trend="FLAT",
-                        liabs=[("Банк Б", 900_000, 75_000, "12.2026")])
-    _submit(db, orlova, a5)
+    # 5. Пекарня: налоговая недоимка → ручной разбор, не назначена; срок разбора уже истёк (подсветка SLA)
+    with _ago(9.5):
+        orlova, a5 = _draft(db, "orlova@demo.local", "5401987658", "WORKING", 2_500_000, 18, "working",
+                            revenue=41_000_000, expenses=37_500_000, ebit=3_400_000, amort=500_000, trend="FLAT",
+                            liabs=[("Банк Б", 900_000, 75_000, "12.2026")])
+    with _ago(9.2):
+        _submit(db, orlova, a5)
 
     # 6. Технопарк: крупная кредитная линия → ручной разбор, не назначена
-    kim, a6 = _draft(db, "kim@demo.local", "7724112230", "CREDIT_LINE", 18_000_000, 48, "equipment",
-                     revenue=260_000_000, expenses=231_000_000, ebit=27_000_000, amort=4_000_000, trend="GROWTH",
-                     liabs=[("Банк В", 14_000_000, 690_000, "05.2028")], collateral=True)
-    _submit(db, kim, a6)
+    with _ago(3.4):
+        kim, a6 = _draft(db, "kim@demo.local", "7724112230", "CREDIT_LINE", 18_000_000, 48, "equipment",
+                         revenue=260_000_000, expenses=231_000_000, ebit=27_000_000, amort=4_000_000, trend="GROWTH",
+                         liabs=[("Банк В", 14_000_000, 690_000, "05.2028")], collateral=True)
+    with _ago(3):
+        _submit(db, kim, a6)
 
     # 7. СтройМонтаж: господдержка — всегда специалист
-    zah, a7 = _draft(db, "zakharov@demo.local", "6658445560", "GOV_SUPPORT", 7_000_000, 36, "equipment",
-                     revenue=96_000_000, expenses=88_000_000, ebit=8_500_000, amort=1_200_000, trend="GROWTH",
-                     liabs=[("Банк Г", 3_000_000, 140_000, "11.2027")])
-    _submit(db, zah, a7)
+    with _ago(1.8):
+        zah, a7 = _draft(db, "zakharov@demo.local", "6658445560", "GOV_SUPPORT", 7_000_000, 36, "equipment",
+                         revenue=96_000_000, expenses=88_000_000, ebit=8_500_000, amort=1_200_000, trend="GROWTH",
+                         liabs=[("Банк Г", 3_000_000, 140_000, "11.2027")])
+    with _ago(1.5):
+        _submit(db, zah, a7)
 
     # 8. ИП Козлова: овердрафт, авто-одобрение (ждёт решения клиента)
-    elena, a8 = _draft(db, "elena@demo.local", "772012345670", "OVERDRAFT", 800_000, 12, "cash_gap", guarantor=False,
-                       revenue=9_500_000, expenses=7_900_000, ebit=1_500_000, amort=100_000, trend="GROWTH", liabs=[])
-    _submit(db, elena, a8)
+    with _ago(20.3):
+        elena, a8 = _draft(db, "elena@demo.local", "772012345670", "OVERDRAFT", 800_000, 12, "cash_gap",
+                           guarantor=False, revenue=9_500_000, expenses=7_900_000, ebit=1_500_000, amort=100_000,
+                           trend="GROWTH", liabs=[])
+    with _ago(20):
+        _submit(db, elena, a8)
     db.commit()
+
+
+def _ago(hours: float):
+    return clock_shift(-timedelta(hours=hours))
 
 
 def main() -> None:

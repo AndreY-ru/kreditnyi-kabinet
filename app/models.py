@@ -8,7 +8,9 @@
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -33,8 +35,22 @@ from app.db import Base
 JSONType = JSON().with_variant(JSONB(), "postgresql")
 
 
+_clock_offset = timedelta(0)  # меняется только в сидах, чтобы демо-заявки «жили» в прошлом
+
+
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(timezone.utc) + _clock_offset
+
+
+@contextmanager
+def clock_shift(delta: timedelta) -> Iterator[None]:
+    """Сдвинуть «текущее время» приложения (для демо-данных). В рабочем коде не используется."""
+    global _clock_offset
+    prev, _clock_offset = _clock_offset, delta
+    try:
+        yield
+    finally:
+        _clock_offset = prev
 
 
 TS = DateTime(timezone=True)
