@@ -13,12 +13,13 @@ from app.models import AuditLog, InfoRequest, Product, ScoringModel, User
 from app.security import admin_user, bank_user, verify_csrf
 from app.services import analyst as an
 from app.services import applications as svc
+from app.services import client_message
 from app.services.credit_logic import rate_for
 from app.services.explain import REASONS
 from app.services.pipeline import active_model
 from app.services.views import application_view, checks_summary
 from app.web.client import parse_money
-from app.web.common import flash, page
+from app.web.common import flash, page, partial
 
 router = APIRouter(prefix="/bank", include_in_schema=False, dependencies=[Depends(verify_csrf)])
 
@@ -103,6 +104,16 @@ async def decision(request: Request, app_id: int, db: Session = Depends(get_db),
         }, status_code=e.status_code)
     flash(request, f"Решение по {app.number} сохранено: {an.DECISION_KINDS[kind][1].lower()}")
     return RedirectResponse(f"/bank/applications/{app.id}", 303)
+
+
+@router.post("/applications/{app_id}/client-message", response_class=HTMLResponse)
+def client_message_draft(request: Request, app_id: int, doc_kind: str = Form(""), info_note: str = Form(""),
+                         db: Session = Depends(get_db), user: User = Depends(bank_user)):
+    """Черновик пояснения для клиента по короткой заметке аналитика. Отправляет аналитик сам."""
+    svc.get_application(db, user, app_id)
+    d = client_message.draft(info_note, doc_kind)
+    return partial(request, "partials/client_message.html", {"text": d.text, "source": d.source,
+                                                             "rejected": d.rejected})
 
 
 @router.get("/process", response_class=HTMLResponse)

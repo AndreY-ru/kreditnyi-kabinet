@@ -1,0 +1,5 @@
+<div id="icom-field" class="field" style="gap:4px"><label for="d-icom">Пояснение для клиента</label>
+<textarea id="d-icom" name="info_comment" rows="4" class="txt" style="font-size:15px">{{ text }}</textarea>
+{% if source == 'llm' %}<span class="xs muted">Черновик от модели с открытыми весами — прочитайте и поправьте перед отправкой</span>
+{% elif source == 'template' %}<span class="xs muted">Шаблон для выбранного документа{% if rejected %} — {% if rejected == 'модель не ответила' %}модель не ответила{% else %}черновик модели отклонён: {{ rejected }}{% endif %}{% endif %}. Можно поправить</span>{% endif %}
+</div>

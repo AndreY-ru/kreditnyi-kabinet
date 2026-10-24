@@ -165,7 +165,10 @@
 <div class="g-info stack-sm" style="gap:10px">
 <div class="field" style="gap:4px"><label for="d-doc">Что запросить у клиента</label>
 <select id="d-doc" name="doc_kind" class="sel">{% for dk in doc_kinds %}<option {% if form.get('doc_kind') == dk %}selected{% endif %}>{{ dk }}</option>{% endfor %}</select></div>
-<div class="field" style="gap:4px"><label for="d-icom">Пояснение для клиента</label><textarea id="d-icom" name="info_comment" rows="2" class="txt" style="font-size:15px">{{ form.get('info_comment', '') }}</textarea></div>
+<div class="field" style="gap:4px"><label for="d-note">Коротко, для себя <span class="muted" style="font-weight:400">— клиент это не увидит</span></label>
+<input id="d-note" name="info_note" class="txt" placeholder="нужна ОСВ 62, выручка не бьётся с БКИ" value="{{ form.get('info_note', '') }}"></div>
+<button type="button" class="btn soft self-start" hx-post="/bank/applications/{{ app.id }}/client-message" hx-include="#d-doc, #d-note" hx-target="#icom-field" hx-swap="outerHTML" hx-disabled-elt="this">Сформулировать для клиента</button>
+{% with text = form.get('info_comment', ''), source = None %}{% include "partials/client_message.html" %}{% endwith %}
 <div class="field" style="gap:4px"><label for="d-due">Срок ответа, дней</label><input id="d-due" name="due_days" class="txt" inputmode="numeric" value="{{ form.get('due_days') or 7 }}"></div>
 </div>
 

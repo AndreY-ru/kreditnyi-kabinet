@@ -1,4 +1,4 @@
-"""ИИ-помощник: подбор по описанию своими словами.
+"""ИИ-помощники: подбор по описанию своими словами и черновик сообщения клиенту для аналитика.
 
 Модель в тестах подменяется: проверяем, что её ответы сверяются с текстом и правилами, а без модели
 всё работает на правилах и шаблонах.
@@ -11,7 +11,8 @@ import httpx
 import pytest
 
 from app.config import settings
-from app.services import intake, llm
+from app.services import client_message, intake, llm
+from tests.helpers import SV, consent_all, draft, submit_and_process
 from tests.test_web import web_login
 
 SEASON = "Нужно 3 млн на закупку товара к сезону, отдам за полгода, есть грузовик в залог"
@@ -121,6 +122,52 @@ def test_parse_api(anna):
     assert r.json() | {"summary": ""} == {"goal": "working", "amount": 3_000_000, "term_months": 6,
                                           "has_collateral": True, "has_guarantor": None, "source": "rules",
                                           "missing": [], "summary": ""}
+
+
+# --- Черновик сообщения клиенту ---------------------------------------------------------------
+
+OSV = "Оборотно-сальдовая ведомость по счёту 62"
+NOTE = "нужна ОСВ 62, выручка не бьётся с БКИ"
+
+
+def test_message_without_model_is_template():
+    d = client_message.draft(NOTE, OSV)
+    assert d.source == "template" and "счёту 62" in d.text
+
+
+def test_message_from_model_is_accepted_when_clean(model):
+    calls = model("Пожалуйста, приложите оборотно-сальдовую ведомость по счёту 62. "
+                  "Она поможет нам подтвердить выручку компании и быстрее рассмотреть заявку.")
+    d = client_message.draft(NOTE, OSV)
+    assert d.source == "llm" and "ведомость" in d.text
+    assert NOTE in calls[0]["messages"][1]["content"]
+
+
+@pytest.mark.parametrize("answer, why", [
+    ("Пожалуйста, приложите ОСВ 62: выручка не совпадает с данными БКИ, нам нужно это проверить.", "бки"),
+    ("Пожалуйста, приложите ведомость по счёту 62 за 12 месяцев, и мы одобрим кредит.", "новые числа"),
+    ("Please attach the trial balance for account 62 so that we can verify your revenue.", "не русский"),
+])
+def test_message_from_model_rejected_when_leaks_or_invents(model, answer, why):
+    model(answer)
+    d = client_message.draft(NOTE, OSV)
+    assert d.source == "template" and why in d.rejected
+
+
+def test_analyst_button_and_api(anna, maria, petr):
+    app = draft(anna, SV, "WORKING", 5_000_000, 24)
+    consent_all(anna, app["id"])
+    submit_and_process(anna, app["id"])
+    r = maria.post(f"/api/bank/applications/{app['id']}/client-message", json={"note": NOTE, "doc_kind": OSV})
+    assert r.status_code == 200 and r.json()["source"] == "template"
+    assert anna.post(f"/api/bank/applications/{app['id']}/client-message",
+                     json={"note": NOTE, "doc_kind": OSV}).status_code == 403  # только банк
+
+    c = web_login("maria@bank.local")
+    page = c.post(f"/bank/applications/{app['id']}/client-message", data={"doc_kind": OSV, "info_note": NOTE},
+                  headers={"HX-Request": "true"})
+    assert page.status_code == 200 and 'id="icom-field"' in page.text and "счёту 62" in page.text
+    assert "Сформулировать для клиента" in c.get(f"/bank/applications/{app['id']}").text
 
 
 def test_safe_text_rules():

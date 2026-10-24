@@ -11,7 +11,7 @@ from app.models import Application, AuditLog, Company, CompanyMember, Product, S
 from app.security import admin_user, bank_user, client_user, current_user, verify_password
 from app.services import analyst as analyst_svc
 from app.services import applications as svc
-from app.services import intake, precheck
+from app.services import client_message, intake, precheck
 from app.services.catalog import match_products
 from app.services.companies import add_company_by_inn, invite_member, require_member, self_check, user_companies
 from app.services.views import application_view, history_rows, label
@@ -324,6 +324,15 @@ def bank_decision(app_id: int, body: s.DecisionIn, db: Session = Depends(get_db)
                        doc_kind=body.doc_kind, info_comment=body.info_comment, due_days=body.due_days)
     db.commit()
     return app_out(db, app)
+
+
+@router.post("/bank/applications/{app_id}/client-message", response_model=s.ClientMessageOut, tags=["bank"])
+def bank_client_message(app_id: int, body: s.ClientMessageIn, db: Session = Depends(get_db),
+                        user: User = Depends(bank_user)):
+    """Черновик пояснения для клиента по короткой заметке аналитика. Ничего не отправляет и не сохраняет."""
+    svc.get_application(db, user, app_id)
+    d = client_message.draft(body.note, body.doc_kind)
+    return s.ClientMessageOut(text=d.text, source=d.source, rejected=d.rejected)
 
 
 @router.get("/bank/metrics", tags=["bank"])

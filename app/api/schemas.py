@@ -148,6 +148,17 @@ class IntakeOut(BaseModel):
     summary: str
 
 
+class ClientMessageIn(BaseModel):
+    note: str = Field(max_length=500, description="Коротко, для себя: «нужна ОСВ 62, выручка не бьётся с БКИ»")
+    doc_kind: str = Field(max_length=255)
+
+
+class ClientMessageOut(BaseModel):
+    text: str
+    source: Literal["llm", "template"]
+    rejected: str | None = Field(default=None, description="Почему черновик модели не подошёл")
+
+
 class MemberIn(BaseModel):
     email: str
     position: str = "Сотрудник"
