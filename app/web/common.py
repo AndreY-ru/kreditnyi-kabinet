@@ -80,8 +80,14 @@ def login_submit(request: Request, email: str = Form(...), password: str = Form(
     request.session["uid"] = user.id
     db.add(AuditLog(actor_id=user.id, action="auth.login", entity="user", entity_id=user.id))
     db.commit()
-    target = next if next.startswith("/") and not next.startswith("//") else "/"
-    return RedirectResponse(target, 303)
+    return RedirectResponse(safe_next(next), 303)
+
+
+def safe_next(target: str) -> str:
+    """Только относительный путь внутри сайта. «/\\evil.com» браузер понимает как «//evil.com»."""
+    if target.startswith("/") and not target.startswith("//") and "\\" not in target and "\n" not in target:
+        return target
+    return "/"
 
 
 @router.post("/logout", dependencies=[Depends(verify_csrf)])

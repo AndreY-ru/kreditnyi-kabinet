@@ -92,7 +92,7 @@ def days_left(v: datetime | None) -> int | None:
     if v is None:
         return None
     lv = _local(v)
-    return (lv.date() - datetime.now(TZ).date()).days
+    return max(0, (lv.date() - datetime.now(TZ).date()).days)  # не «осталось −1 дней», пока воркер не закрыл
 
 
 def hours_left(v: datetime | None) -> float | None:

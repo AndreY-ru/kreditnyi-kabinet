@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -60,6 +61,11 @@ class QueueRow:
     overdue: bool
 
 
+def _start_of_local_day(now: datetime) -> datetime:
+    tz = ZoneInfo(settings.display_tz)  # «сегодня» в часовом поясе банка, а не UTC
+    return now.astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+
+
 def queue_counts(db: Session, user: User) -> dict[str, int]:
     now = utcnow()
     base = select(func.count()).select_from(ReviewTask).join(Application).where(ReviewTask.closed_at.is_(None))
@@ -71,7 +77,7 @@ def queue_counts(db: Session, user: User) -> dict[str, int]:
         "decided_today": db.scalar(
             select(func.count()).select_from(Decision).where(
                 Decision.source == "ANALYST", Decision.outcome != "NEEDS_INFO",
-                Decision.created_at >= now.replace(hour=0, minute=0, second=0, microsecond=0))) or 0,
+                Decision.created_at >= _start_of_local_day(now))) or 0,
     }
 
 
@@ -121,7 +127,6 @@ def queue(db: Session, user: User, *, tab: str = "mine", q: str = "", product_co
 
 
 def _aware(dt):
-    from datetime import timezone
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 

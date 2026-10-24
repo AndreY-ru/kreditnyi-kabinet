@@ -28,7 +28,8 @@ def queue(request: Request, tab: str = "mine", q: str = "", product: str = "", d
           user: User = Depends(bank_user)):
     rows = an.queue(db, user, tab=tab, q=q, product_code=product)
     products = db.scalars(select(Product).order_by(Product.id)).all()
-    return page(request, "bank/queue.html", {"user": user, "nav": "queue", "rows": rows, "tab": tab, "q": q,
+    return page(request, "bank/queue.html", {"user": user, "nav": "all" if tab == "all" else "queue", "rows": rows,
+                                             "tab": tab, "q": q,
                                              "product": product, "products": products,
                                              "counts": an.queue_counts(db, user)})
 

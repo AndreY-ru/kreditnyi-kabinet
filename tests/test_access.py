@@ -58,3 +58,11 @@ def test_signer_sees_banner_and_non_signer_has_no_sign_button(anna):
     igor = web_login("igor@demo.local")
     assert "ждёт вашей подписи" in igor.get("/cabinet").text
     assert "Подписать (смоделировано)" in igor.get(f"/applications/{app['id']}").text
+
+
+def test_login_next_is_not_open_redirect():
+    from app.web.common import safe_next
+
+    assert safe_next("/applications/1") == "/applications/1"
+    for bad in ("//evil.example", "/\\evil.example", "https://evil.example", "/x\nLocation: //evil"):
+        assert safe_next(bad) == "/"
