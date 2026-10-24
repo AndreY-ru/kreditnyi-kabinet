@@ -79,3 +79,12 @@ def test_full_web_flow_from_podbor_to_status():
     process()
     r = c.get(f"/applications/{app_id}")
     assert "Кредит одобрен" in r.text
+
+
+def test_favicon_is_served():
+    from app.main import app
+
+    c = TestClient(app)
+    r = c.get("/favicon.ico")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg+xml")
+    assert 'rel="icon"' in c.get("/login").text

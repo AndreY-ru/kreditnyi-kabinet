@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
@@ -79,6 +79,10 @@ def create_app() -> FastAPI:
     async def _validation(request: Request, exc: RequestValidationError):
         return JSONResponse({"error": "validation_failed", "message": "Проверьте данные запроса",
                              "details": jsonable_encoder(exc.errors())}, status_code=422)
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():  # браузеры просят /favicon.ico даже при <link rel="icon">
+        return FileResponse(Path(__file__).parent / "static" / "favicon.svg", media_type="image/svg+xml")
 
     @app.get("/health", include_in_schema=False)
     def health():
