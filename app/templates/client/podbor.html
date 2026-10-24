@@ -9,7 +9,7 @@
 </div>
 
 {% if not draft %}
-<form method="post" action="/podbor/describe" class="card" aria-labelledby="desc-h" style="gap:12px">
+<form method="post" action="/podbor/describe" class="card" aria-labelledby="desc-h" style="gap:12px" data-busy="Разбираем…">
 <input type="hidden" name="csrf_token" value="{{ csrf }}">
 <div class="between"><h2 id="desc-h" class="h3">Или опишите задачу своими словами</h2><span class="small muted">Заполним форму за вас — вы проверите и поправите</span></div>
 <label class="sr" for="desc">Описание задачи</label>

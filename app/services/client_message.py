@@ -46,6 +46,16 @@ _SYSTEM = (
 )
 
 
+_EXAMPLES = (
+    ("Документ: Договор с ключевым покупателем\nЗаметка аналитика: почти вся выручка от одного клиента, нужен договор",
+     "Пожалуйста, приложите договор с вашим основным покупателем. Так мы лучше поймём, откуда у компании "
+     "регулярная выручка, и быстрее рассмотрим заявку."),
+    ("Документ: Документы по залогу\nЗаметка аналитика: залог без оценки, пусть пришлют отчёт оценщика",
+     "Пожалуйста, приложите отчёт об оценке имущества, которое вы предлагаете в залог. Без оценки мы не сможем "
+     "учесть залог при рассмотрении заявки."),
+)
+
+
 @dataclass
 class Draft:
     text: str
@@ -62,7 +72,8 @@ def draft(note: str, doc_kind: str) -> Draft:
     note = (note or "").strip()
     if not note or not llm.enabled():
         return Draft(template, "template")
-    out = llm.chat_text(_SYSTEM, f"Документ: {doc_kind}\nЗаметка аналитика: {note[:500]}", max_tokens=200)
+    out = llm.chat_text(_SYSTEM, f"Документ: {doc_kind}\nЗаметка аналитика: {note[:500]}", max_tokens=120,
+                        examples=_EXAMPLES)
     if out is None:
         return Draft(template, "template", rejected="модель не ответила")
     out = out.strip().strip("«»\"")

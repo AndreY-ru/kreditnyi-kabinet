@@ -30,13 +30,17 @@ def enabled() -> bool:
     return bool(settings.llm_url)
 
 
-def _chat(system: str, user: str, *, fmt: dict[str, Any] | None, max_tokens: int) -> str | None:
+def _chat(system: str, user: str, *, fmt: dict[str, Any] | None, max_tokens: int,
+          examples: tuple[tuple[str, str], ...] = ()) -> str | None:
     global _down_until
     if not enabled() or time.monotonic() < _down_until:
         return None
+    if settings.llm_model.startswith("qwen3"):
+        user += "\n/no_think"  # официальный переключатель Qwen3: без рассуждений вслух в ответе
+    shots = [{"role": r, "content": c} for q, a in examples for r, c in (("user", q), ("assistant", a))]
     payload: dict[str, Any] = {
         "model": settings.llm_model, "stream": False, "think": False, "keep_alive": "60m",
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        "messages": [{"role": "system", "content": system}, *shots, {"role": "user", "content": user}],
         "options": {"temperature": 0, "num_ctx": 2048, "num_predict": max_tokens},
     }
     if fmt is not None:
@@ -64,8 +68,10 @@ def chat_json(system: str, user: str, schema: dict[str, Any], max_tokens: int = 
     return data if isinstance(data, dict) else None
 
 
-def chat_text(system: str, user: str, max_tokens: int = 300) -> str | None:
-    return _chat(system, user, fmt=None, max_tokens=max_tokens)
+def chat_text(system: str, user: str, max_tokens: int = 300,
+              examples: tuple[tuple[str, str], ...] = ()) -> str | None:
+    """Свободный текст; examples — пары (запрос, образцовый ответ): маленьким моделям примеры помогают сильнее правил."""
+    return _chat(system, user, fmt=None, max_tokens=max_tokens, examples=examples)
 
 
 # --- Проверка текста, который увидит клиент ------------------------------------------------
@@ -92,7 +98,7 @@ def safe_text(candidate: str, *, source: str, forbidden: tuple[str, ...] = (), m
     if numbers(text) - numbers(source):
         return "новые числа"
     low = text.lower().replace("ё", "е")
-    for word in PROMISES + forbidden:
-        if word in low:
+    for word in PROMISES + forbidden:  # с начала слова: «ош-ибки» не должно ловиться как «бки»
+        if re.search(r"(?<![а-яa-z])" + re.escape(word), low):
             return f"запрещённое слово «{word}»"
     return None

@@ -338,3 +338,4 @@ table.queue tr.mine{background:var(--blue-row)}
 .dec:has(#k-info:checked) .g-info{display:flex}
 .dec:has(#k-counter:checked) .g-reasons,.dec:has(#k-decline:checked) .g-reasons{display:flex}
 .dec:has(#k-approve:checked) .l-approve,.dec:has(#k-counter:checked) .l-counter,.dec:has(#k-info:checked) .l-info,.dec:has(#k-decline:checked) .l-decline{display:inline}
+.busy-note{display:none}.busy-note.htmx-request{display:inline}

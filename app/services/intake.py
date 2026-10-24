@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from app.services import llm
 from app.services.catalog import GOALS, TERMS
@@ -34,12 +34,14 @@ _UNITS = [  # (шаблон единицы, множитель)
 ]
 _MONEY_WITH_UNIT = re.compile(_NUM + r"\s*(" + "|".join(u for u, _ in _UNITS) + r")")
 _MONEY_K = re.compile(r"(?<![\d.,])(\d+(?:[.,]\d+)?)к(?![а-я])")  # «500к» — только слитно, «5 к сезону» не сумма
-_AMOUNT_TRIGGER = re.compile(r"(нужн\w*|надо|взять|занять|кредит\w*|сумм\w*|прошу|хочу|требует\w*|не хватает)\D{0,25}$")
+_AMOUNT_TRIGGER = re.compile(r"(нуж\w*|надо|взять|занять|кредит\w*|сумм\w*|прошу|хочу|требует\w*|не хватает)\D{0,25}$")
 _NOT_AMOUNT = re.compile(r"(выручк\w*|оборот\w*|прибыл\w*|доход\w*|долг\w*|остат\w*|должны|задолженн\w*)\D{0,15}$")
 _PLAIN_MONEY = re.compile(r"(?<!\d)(?<!\d[.,])(\d{5,12})(?!\d|[.,]\d)")  # 50000, 3000000 (запятая после — не дробь)
 _TERM_NUM = re.compile(_NUM + r"\s*(мес\w*|года?|лет)(?![а-я])")  # не «годовых» и не «годовой»
 _MAX_TERM = 120
-_TERM_WORDS = {"полгода": 6, "полугода": 6, "полтора года": 18, "квартал": 3, "год": 12, "года": 12}
+_TERM_WORDS = {"полгода": 6, "полугода": 6, "полтора года": 18, "квартал": 3, "год": 12, "года": 12,
+               "пару месяцев": 2, "пару лет": 24, "пару годиков": 24}
+_TERM_REVERSED = re.compile(r"(?<![а-я])(месяц\w*|мес|года?|лет)\s+на\s+" + _NUM[len("(?<![а-я])"):])  # «месяца на четыре»
 _TERM_TRIGGER = re.compile(r"(на|за|через|срок\w*|верн\w*|отда\w*|погас\w*|в течени\w*|закро\w*)\s*[:—-]?\s*$")
 _NOT_TERM = re.compile(r"((работа\w*|на рынке|существ\w*|бизнесу|компании|фирме|открыл\w*)\s+"
                        r"|(выручк\w*|оборот\w*|прибыл\w*|доход\w*)\s+(за|в)\s+)$")
@@ -88,6 +90,11 @@ def term_candidates(text: str) -> list[tuple[int, int, bool]]:
             continue
         out.append((m.start(), int(round(months)), _looks_like_term(t, m.start())))
         taken.append(range(m.start(), m.end()))
+    for m in _TERM_REVERSED.finditer(t):
+        months = _num(m.group(2)) * (1 if m.group(1).startswith("мес") else 12)
+        if 0 < months <= _MAX_TERM and not any(m.start() in r for r in taken):
+            out.append((m.start(), int(round(months)), True))  # «лет на пять» — так говорят о сроке кредита
+            taken.append(range(m.start(), m.end()))
     for words, months in _TERM_WORDS.items():
         for m in re.finditer(r"(?<![а-я])" + words + r"(?![а-я])", t):
             if not any(m.start() in r for r in taken):
@@ -105,14 +112,14 @@ def _looks_like_term(t: str, pos: int) -> bool:
 
 _GOAL_RULES = [  # порядок важен: от более конкретного к общему
     ("refinance", r"рефинанс|перекредит|(погасить|закрыть) (\w+ )?(кредит|долг)|кредит в другом банке"),
-    ("cash_gap", r"кассов\w* разрыв|зарплат|налоги заплатить|заплатить налоги|пока (не )?(заплат|оплат|при[дш]|перевед)"
+    ("cash_gap", r"разрыв|зарплат|налоги заплатить|заплатить налоги|пока (не )?(заплат|оплат|при[дш]|перевед)"
                  r"|задерживают оплат|отсрочк\w* платеж|дебитор"),
     ("equipment", r"(куп\w*|приобр\w*|обнов\w*|замен\w*|взять в лизинг|на)\s+(\w+\s+){0,3}"
                   r"(оборудован|станк|станок|техник|машин|автомоб|грузовик|трактор|фургон|печ|лини|экскаватор"
                   r"|компьютер|кофемашин|холодильн)|оборудовани"),
     ("new_direction", r"нов\w* направлени|открыть (\w+ )?(точк|магазин|филиал|кофейн|салон|цех|склад|производств)"
-                      r"|расшир\w*|запуст\w*|франшиз"),
-    ("working", r"закуп|товар|сыр[ье]|материал|сезон|оборот|запас|пополн"),
+                      r"|расшир\w*|запуст\w*|запуска\w*|франшиз"),
+    ("working", r"закуп|товар|сыр[ье]|материал|сезон|оборотн|оборотк|запас|пополн"),  # не «оборот 120 млн»
 ]
 _NO_COLLATERAL = re.compile(r"без залога|залога нет|нечего (заложить|в залог)|нет залога")
 _COLLATERAL = re.compile(r"залог|заложить|под обеспечени")
@@ -127,8 +134,9 @@ class Intake:
     term: int | None = None
     collateral: bool | None = None
     guarantor: bool | None = None
-    source: str = "rules"  # rules — правила, llm — модель (числа сверены с текстом)
+    source: str = "rules"  # rules — только правила; llm — модель заполнила пробелы (model_filled)
     notes: list[str] = field(default_factory=list)
+    model_filled: list[str] = field(default_factory=list)
 
     @property
     def missing(self) -> list[str]:
@@ -181,54 +189,60 @@ _SCHEMA = {
         "goal": {"type": "string", "enum": [*GOALS, "unknown"]},
         "amount_rub": {"type": "integer"},
         "term_months": {"type": "integer"},
-        "collateral": {"type": "string", "enum": ["yes", "no", "unknown"]},
-        "guarantor": {"type": "string", "enum": ["yes", "no", "unknown"]},
     },
-    "required": ["goal", "amount_rub", "term_months", "collateral", "guarantor"],
+    "required": ["goal", "amount_rub", "term_months"],
 }
 
 _SYSTEM = (
-    "Ты разбираешь запрос предпринимателя на кредит для бизнеса и заполняешь форму. Отвечай только JSON.\n"
-    "goal: working — пополнить оборотные средства (закупка товара, сырья, сезон); equipment — купить "
-    "оборудование, технику, транспорт; cash_gap — закрыть кассовый разрыв (зарплата, налоги, задержка оплаты "
-    "от покупателей); new_direction — новое направление, новая точка, расширение; refinance — погасить кредит "
-    "в другом банке; unknown — непонятно.\n"
-    "amount_rub — сумма кредита в рублях (3 млн = 3000000), 0 если не указана. Не путай с выручкой и долгами.\n"
-    "term_months — на сколько месяцев нужен кредит (полгода = 6, 2 года = 24), 0 если не указан. "
-    "Не путай со сроком работы бизнеса.\n"
-    "collateral — есть ли что дать банку в залог; guarantor — готов ли собственник стать поручителем."
+    "Ты разбираешь запрос предпринимателя на кредит для бизнеса. Отвечай только JSON.\n"
+    "goal: working — оборотные средства (закупка товара, сырья, сезон); equipment — оборудование, техника, "
+    "транспорт, мебель; cash_gap — кассовый разрыв (зарплата, налоги, задержка оплаты); new_direction — новое "
+    "направление, новая точка, новый зал, расширение; refinance — погасить кредит в другом банке; unknown.\n"
+    "amount_rub — сумма кредита в рублях (3 млн = 3000000), 0 если нет. Не выручка и не долги.\n"
+    "term_months — на сколько месяцев кредит (полгода = 6, 2 года = 24), 0 если нет. Не возраст бизнеса."
 )
 
 
-def parse_llm(text: str) -> dict | None:
-    return llm.chat_json(_SYSTEM, text[:1000], _SCHEMA)
+def _gaps(text: str, rules: Intake) -> set[str]:
+    """Где правила не уверены — только там спрашиваем модель."""
+    t = _normalize(text)
+    gaps = set()
+    if rules.goal is None:
+        gaps.add("goal")
+    money = money_candidates(text)
+    if len({v for _, v in money}) > 1 and not any(_AMOUNT_TRIGGER.search(t[max(0, p - 40):p]) for p, _ in money):
+        gaps.add("amount")  # несколько сумм и непонятно, какая просится
+    if rules.term is None and term_candidates(text):
+        gaps.add("term")
+    return gaps
 
 
 def parse(text: str) -> Intake:
-    """Правила + модель. Числа модели принимаем, только если они есть в тексте."""
+    """Сначала правила (мгновенно). Модель — только для пробелов, и её числа должны быть в тексте."""
     rules = parse_rules(text)
-    data = parse_llm(text) if llm.enabled() and text.strip() else None
+    gaps = _gaps(text, rules)
+    if not gaps or not llm.enabled():
+        return rules
+    data = llm.chat_json(_SYSTEM, text[:1000], _SCHEMA, max_tokens=60)
     if data is None:
         return rules
-    res = Intake(source="llm")
-    goal = data.get("goal")
-    res.goal = goal if goal in GOALS else rules.goal
-
-    money = {v for _, v in money_candidates(text)}
+    res = replace(rules, notes=list(rules.notes))
+    if "goal" in gaps and data.get("goal") in GOALS:
+        res.goal = data["goal"]
+        res.model_filled.append("цель")
     amount = data.get("amount_rub")
-    if isinstance(amount, int) and amount > 0 and amount in money:
-        res.amount = amount
-    else:
-        res.amount = rules.amount
-        if isinstance(amount, int) and amount > 0:
-            res.notes.append(f"модель предложила сумму {amount}, которой нет в тексте, — взяли из текста")
-
-    terms = {v for _, v, _ in term_candidates(text)}
+    if "amount" in gaps and isinstance(amount, int) and amount > 0:
+        if amount in {v for _, v in money_candidates(text)}:
+            res.amount = amount
+            res.model_filled.append("сумму")
+        else:
+            res.notes.append(f"модель предложила сумму {amount}, которой нет в тексте, — не взяли")
     term = data.get("term_months")
-    res.term = term if isinstance(term, int) and term > 0 and term in terms else rules.term
-
-    res.collateral = {"yes": True, "no": False}.get(data.get("collateral"), rules.collateral)
-    res.guarantor = {"yes": True, "no": False}.get(data.get("guarantor"), rules.guarantor)
+    if "term" in gaps and isinstance(term, int) and term in {v for _, v, _ in term_candidates(text)}:
+        res.term = term
+        res.model_filled.append("срок")
+    if res.model_filled:
+        res.source = "llm"
     return res
 
 

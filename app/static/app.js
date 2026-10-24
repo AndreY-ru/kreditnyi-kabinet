@@ -5,6 +5,14 @@
     if (csrf) e.detail.headers['X-CSRF-Token'] = csrf.content;
   });
 
+  // Долгая отправка формы (разбор текста моделью): блокируем кнопку и показываем, что идёт работа
+  document.addEventListener('submit', function (e) {
+    var f = e.target;
+    if (!f.matches('[data-busy]')) return;
+    var b = f.querySelector('button[type=submit]');
+    if (b) { b.disabled = true; b.textContent = f.getAttribute('data-busy'); }
+  });
+
   // Переключатель компании в шапке
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-toggle="co-menu"]');

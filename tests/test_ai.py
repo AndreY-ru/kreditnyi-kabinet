@@ -73,38 +73,47 @@ def test_rules_do_not_invent_missing_numbers():
 
 # --- Подбор своими словами: модель -------------------------------------------------------------
 
-def test_model_picks_requested_amount_from_text(model):
-    calls = model({"goal": "equipment", "amount_rub": 2_500_000, "term_months": 24, "collateral": "unknown",
-                   "guarantor": "yes"})
-    r = intake.parse("Выручка 50 млн, нужно 2,5 млн на станок на 2 года, собственник поручится")
-    assert (r.source, r.goal, r.amount, r.term, r.guarantor) == ("llm", "equipment", 2_500_000, 24, True)
-    assert calls[0]["format"]["required"]  # строгий формат ответа
-    assert calls[0]["think"] is False
+# Фраза, где правила не уверены: цель без ключевых слов, две суммы и ни одной «нужно»
+HARD = "Оборот 40 млн, 2 млн под ремонт и мебель для нового зала, года на полтора"
 
 
-def test_model_cannot_invent_amount_or_term(model):
-    model({"goal": "working", "amount_rub": 7_000_000, "term_months": 60, "collateral": "yes", "guarantor": "yes"})
+def test_clear_request_does_not_call_model(model):
+    calls = model({"goal": "cash_gap", "amount_rub": 3_000_000, "term_months": 6})
     r = intake.parse(SEASON)
-    assert r.amount == 3_000_000 and r.term == 6  # 7 млн и 60 мес. в тексте нет — берём из текста
-    assert r.notes and "нет в тексте" in r.notes[0]
+    assert calls == [] and r.source == "rules" and r.goal == "working"  # правила уверены — модель не нужна
+
+
+def test_model_fills_only_gaps_of_rules(model):
+    calls = model({"goal": "new_direction", "amount_rub": 2_000_000, "term_months": 18})
+    r = intake.parse(HARD)
+    assert (r.source, r.goal, r.amount, r.term) == ("llm", "new_direction", 2_000_000, 18)
+    assert r.model_filled == ["цель", "сумму"]  # срок правила нашли сами
+    assert calls[0]["format"]["required"] and calls[0]["think"] is False  # строгий формат, без рассуждений
+
+
+def test_model_cannot_invent_amount(model):
+    model({"goal": "new_direction", "amount_rub": 7_000_000, "term_months": 60})
+    r = intake.parse(HARD)
+    assert r.amount == 2_000_000 and r.term == 18  # 7 млн и 60 мес. в тексте нет — остаётся выбор правил
+    assert r.notes and "нет в тексте" in r.notes[0] and "сумму" not in r.model_filled
 
 
 def test_model_down_falls_back_to_rules(model):
     model(None)
-    r = intake.parse(SEASON)
-    assert r.source == "rules" and r.amount == 3_000_000
+    r = intake.parse(HARD)
+    assert r.source == "rules" and r.amount == 2_000_000 and r.goal is None
 
 
 def test_model_down_is_not_retried_on_every_request(model):
     calls = model(None)
-    intake.parse(SEASON)
-    intake.parse(SEASON)
+    intake.parse(HARD)
+    intake.parse(HARD)
     assert len(calls) == 1  # после сбоя полминуты не ждём таймаут на каждом запросе
 
 
 def test_model_garbage_falls_back_to_rules(model):
     model("Конечно! Вот ваш ответ: сумма три миллиона")
-    assert intake.parse(SEASON).source == "rules"
+    assert intake.parse(HARD).source == "rules"
 
 
 def test_describe_fills_podbor_form_and_shows_how_understood():
@@ -140,7 +149,7 @@ def test_message_from_model_is_accepted_when_clean(model):
                   "Она поможет нам подтвердить выручку компании и быстрее рассмотреть заявку.")
     d = client_message.draft(NOTE, OSV)
     assert d.source == "llm" and "ведомость" in d.text
-    assert NOTE in calls[0]["messages"][1]["content"]
+    assert NOTE in calls[0]["messages"][-1]["content"]  # перед запросом — примеры
 
 
 @pytest.mark.parametrize("answer, why", [
@@ -168,6 +177,14 @@ def test_analyst_button_and_api(anna, maria, petr):
                   headers={"HX-Request": "true"})
     assert page.status_code == 200 and 'id="icom-field"' in page.text and "счёту 62" in page.text
     assert "Сформулировать для клиента" in c.get(f"/bank/applications/{app['id']}").text
+
+
+def test_forbidden_words_match_whole_word_start_only():
+    """«ош-ибки» содержит «бки», но про бюро кредитных историй там ни слова — такой текст пропускаем."""
+    ok = "Пожалуйста, приложите отчётность. Если цифры расходятся, это может указывать на ошибки в анкете."
+    assert llm.safe_text(ok, source="", forbidden=client_message.INTERNAL) is None
+    leak = "Пожалуйста, приложите отчётность: выручка не совпадает с данными БКИ."
+    assert "бки" in llm.safe_text(leak, source="", forbidden=client_message.INTERNAL)
 
 
 def test_safe_text_rules():
