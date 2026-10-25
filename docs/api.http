@@ -1,6 +1,12 @@
 ### Примеры запросов (формат REST Client / JetBrains HTTP Client; Bruno и Postman импортируют docs/openapi.json)
 @base = http://localhost:8000
 
+### Регистрация нового клиента (ставит cookie сессии; дальше — подключить компанию по ИНН)
+POST {{base}}/api/auth/register
+Content-Type: application/json
+
+{"email": "olga@new.test", "full_name": "Ольга Новикова", "password": "Gorizont2026", "pd_consent": true}
+
 ### Вход клиента (ставит cookie сессии)
 POST {{base}}/api/auth/login
 Content-Type: application/json

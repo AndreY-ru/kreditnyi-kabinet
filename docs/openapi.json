@@ -47,6 +47,58 @@
                 }
             }
         },
+        "/api/auth/register": {
+            "post": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Register",
+                "description": "Регистрация представителя бизнеса. Дальше — POST /api/companies с ИНН.",
+                "operationId": "register_api_auth_register_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RegisterIn"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserOut"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Content",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/auth/logout": {
             "post": {
                 "tags": [
@@ -440,6 +492,51 @@
                                 }
                             }
                         }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/companies/{company_id}/members/{user_id}": {
+            "delete": {
+                "tags": [
+                    "companies"
+                ],
+                "summary": "Company Member Remove",
+                "description": "Убрать сотрудника (руководитель с правом подписи) или выйти самому. Последнего подписанта убрать нельзя.",
+                "operationId": "company_member_remove_api_companies__company_id__members__user_id__delete",
+                "parameters": [
+                    {
+                        "name": "company_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "title": "Company Id"
+                        }
+                    },
+                    {
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "title": "User Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Successful Response"
                     },
                     "422": {
                         "description": "Validation Error",
@@ -3323,6 +3420,38 @@
                     "action"
                 ],
                 "title": "ReasonOut"
+            },
+            "RegisterIn": {
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "maxLength": 255,
+                        "title": "Email"
+                    },
+                    "full_name": {
+                        "type": "string",
+                        "maxLength": 255,
+                        "title": "Full Name"
+                    },
+                    "password": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "title": "Password"
+                    },
+                    "pd_consent": {
+                        "type": "boolean",
+                        "title": "Pd Consent",
+                        "description": "Согласие на обработку персональных данных — обязательно"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "email",
+                    "full_name",
+                    "password",
+                    "pd_consent"
+                ],
+                "title": "RegisterIn"
             },
             "ScoringModelIn": {
                 "properties": {

@@ -100,3 +100,14 @@ def test_file_over_limit_is_not_read_whole(anna, monkeypatch):
     app = draft(anna, SV, "WORKING", 1_000_000, 12)
     r = anna.post(f"/api/applications/{app['id']}/info-response", files={"files": ("big.pdf", b"x" * 1_100_000)})
     assert r.status_code == 422 and r.json()["error"] == "file_too_large"
+
+
+def test_api_rejects_form_encoded_json_and_cookie_is_httponly_lax(anna):
+    """Чужой сайт может отправить только форму (text/plain, urlencoded) — JSON API её не примет."""
+    from app.main import app
+
+    r = anna.post("/api/companies", content='{"inn": "7713550120", "position": "x"}',
+                  headers={"Content-Type": "text/plain"})
+    assert r.status_code == 422
+    cookie = TestClient(app).post("/api/auth/login", json={"email": "igor@demo.local", "password": "demo"})
+    assert "httponly" in cookie.headers["set-cookie"].lower() and "samesite=lax" in cookie.headers["set-cookie"].lower()
