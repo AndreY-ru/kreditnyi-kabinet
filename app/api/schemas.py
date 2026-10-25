@@ -25,6 +25,13 @@ class LoginIn(BaseModel):
     password: str
 
 
+class RegisterIn(BaseModel):
+    email: str = Field(max_length=255)
+    full_name: str = Field(max_length=255)
+    password: str = Field(max_length=200)
+    pd_consent: bool = Field(description="Согласие на обработку персональных данных — обязательно")
+
+
 class UserOut(ORM):
     id: int
     email: str

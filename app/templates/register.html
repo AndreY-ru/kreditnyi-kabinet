@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Регистрация · Кредитный кабинет{% endblock %}
+{% macro field(name, label, type='text', autocomplete='', hint='') -%}
+<div class="field"><label for="{{ name }}">{{ label }}</label>
+<input class="txt" id="{{ name }}" name="{{ name }}" type="{{ type }}" {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
+  {% if type != 'password' %}value="{{ form.get(name, '') }}"{% endif %} required
+  {% if errors.get(name) %}aria-invalid="true" aria-describedby="{{ name }}-err"{% endif %}>
+{% if errors.get(name) %}<span id="{{ name }}-err" class="err">{{ errors[name] }}</span>{% elif hint %}<span class="hint">{{ hint }}</span>{% endif %}
+</div>
+{%- endmacro %}
+{% block body %}
+<main class="login">
+<div class="card lg">
+<div class="inline"><span class="logo-mark">К</span><span class="logo-text">Кредитный кабинет</span><span class="demo-badge">Демо-данные</span></div>
+<div class="stack-xs" style="gap:6px"><h1 class="h2">Регистрация</h1>
+<p class="small muted" style="margin:0">Для представителя бизнеса: собственника, директора, бухгалтера. После регистрации добавите компанию по ИНН — данные подставим из реестра.</p></div>
+{% if error %}<div class="flash err" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/register" class="stack">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<input type="hidden" name="next" value="{{ next }}">
+{{ field('full_name', 'Фамилия и имя', autocomplete='name') }}
+{{ field('email', 'Email', type='email', autocomplete='email', hint='Будет логином') }}
+{{ field('password', 'Пароль', type='password', autocomplete='new-password', hint='Не короче 8 символов, буквы и цифры') }}
+{{ field('password2', 'Пароль ещё раз', type='password', autocomplete='new-password') }}
+<label class="cb"><input type="checkbox" name="pd_consent" value="1" {% if form.get('pd_consent') %}checked{% endif %} required
+  {% if errors.get('pd_consent') %}aria-invalid="true" aria-describedby="pd-err"{% endif %}>
+<span class="small">Согласен на обработку персональных данных для работы в кабинете</span></label>
+{% if errors.get('pd_consent') %}<span id="pd-err" class="err">{{ errors['pd_consent'] }}</span>{% endif %}
+<button class="btn primary lg" type="submit">Зарегистрироваться</button>
+</form>
+<p class="small" style="margin:0">Уже есть аккаунт? <a href="/login{% if next %}?next={{ next|urlencode }}{% endif %}">Войти</a></p>
+<p class="xs muted" style="margin:0">Демо: подтверждения по почте или SMS нет — по условию кейса весь сценарий проходит внутри кабинета. Сотрудников банка заводит банк.</p>
+</div>
+</main>
+{% endblock %}

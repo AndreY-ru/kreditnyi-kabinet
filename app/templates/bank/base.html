@@ -13,7 +13,7 @@
 </nav>
 <div class="user-menu">
 <div style="display:flex;flex-direction:column;text-align:right"><span class="m">{{ user.full_name }}</span><span class="xs" style="color:var(--on-navy)">{{ user.position or user.role }}</span></div>
-<span class="avatar" aria-hidden="true">{{ user.initials }}</span>
+<a href="/account" class="avatar" title="Профиль" aria-label="Профиль: {{ user.full_name }}" style="text-decoration:none">{{ user.initials }}</a>
 <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="linkbtn small" type="submit">Выйти</button></form>
 </div>
 </div>

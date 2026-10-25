@@ -1,0 +1,28 @@
+{% extends "client/base.html" if user.role == 'CLIENT' else "bank/base.html" %}
+{% block title %}Профиль · Кредитный кабинет{% endblock %}
+{% block main %}
+<div class="stack-xs"><h1 class="h1">Профиль</h1></div>
+<div class="row">
+<section class="card col-main" aria-labelledby="me-h" style="gap:12px">
+<h2 id="me-h" class="h3">{{ user.full_name }}</h2>
+<dl class="facts c3">
+<div><dt>Email (логин)</dt><dd>{{ user.email }}</dd></div>
+<div><dt>Роль</dt><dd>{{ {'CLIENT': 'Представитель бизнеса', 'ANALYST': 'Кредитный аналитик', 'ADMIN': 'Администратор'}.get(user.role, user.role) }}</dd></div>
+<div><dt>В кабинете с</dt><dd>{{ user.created_at|ddate }}</dd></div>
+</dl>
+{% if user.role == 'CLIENT' %}<p class="small muted" style="margin:0">Компании и команда — на странице <a href="/company">«Компания»</a>.</p>{% endif %}
+</section>
+<form method="post" action="/account/password" class="card col-side stack" aria-labelledby="pw-h" style="gap:14px">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<h2 id="pw-h" class="h3">Сменить пароль</h2>
+{% for name, label, ac in (('current', 'Текущий пароль', 'current-password'), ('new', 'Новый пароль', 'new-password'), ('new2', 'Новый пароль ещё раз', 'new-password')) %}
+<div class="field"><label for="pw-{{ name }}">{{ label }}</label>
+<input class="txt" id="pw-{{ name }}" name="{{ name }}" type="password" autocomplete="{{ ac }}" required {% if errors.get(name) %}aria-invalid="true" aria-describedby="pw-{{ name }}-err"{% endif %}>
+{% if errors.get(name) %}<span id="pw-{{ name }}-err" class="err">{{ errors[name] }}</span>{% elif name == 'new' %}<span class="hint">Не короче 8 символов, буквы и цифры</span>{% endif %}
+</div>
+{% endfor %}
+<button class="btn primary self-start" type="submit">Сменить пароль</button>
+<span class="xs muted">Восстановления пароля по почте нет: по условию кейса сценарий не уходит в почту и SMS. В реальном банке — вход через Госуслуги или ЭП.</span>
+</form>
+</div>
+{% endblock %}

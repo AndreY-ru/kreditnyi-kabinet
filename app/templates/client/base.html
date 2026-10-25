@@ -32,7 +32,7 @@
 </div>
 {% endif %}
 <div class="user-menu">
-<span class="avatar" title="{{ user.full_name }}" aria-label="{{ user.full_name }}">{{ user.initials }}</span>
+<a href="/account" class="avatar" title="Профиль: {{ user.full_name }}" aria-label="Профиль: {{ user.full_name }}" style="text-decoration:none">{{ user.initials }}</a>
 <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="linkbtn small" type="submit">Выйти</button></form>
 </div>
 {% endblock %}

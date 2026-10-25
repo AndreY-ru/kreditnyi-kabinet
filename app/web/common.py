@@ -1,4 +1,4 @@
-"""Общие HTML-маршруты: вход, выход, корень, скачивание документов. Плюс помощники для шаблонов."""
+"""Общие HTML-маршруты: вход, регистрация, профиль, выход, корень, скачивание документов. Плюс помощники для шаблонов."""
 from __future__ import annotations
 
 import os
@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.domain.transitions import NotFound
+from app.domain.transitions import DomainError, NotFound
 from app.models import Company, Document, User
 from app.security import (
     TooManyAttempts,
@@ -20,6 +20,7 @@ from app.security import (
     start_session,
     verify_csrf,
 )
+from app.services import accounts
 from app.services.applications import get_application
 from app.services.companies import user_companies
 from app.templating import templates
@@ -95,6 +96,63 @@ def safe_next(target: str) -> str:
     if target.startswith("/") and not target.startswith("//") and "\\" not in target and "\n" not in target:
         return target
     return "/"
+
+
+@router.get("/register")
+def register_page(request: Request, next: str = "", user: User | None = Depends(current_user_optional)):
+    if user is not None:
+        return RedirectResponse("/", 303)
+    return page(request, "register.html", {"next": next, "form": {}, "errors": {}, "error": None})
+
+
+@router.post("/register", dependencies=[Depends(verify_csrf)])
+def register_submit(request: Request, full_name: str = Form(""), email: str = Form(""), password: str = Form(""),
+                    password2: str = Form(""), pd_consent: str | None = Form(None), next: str = Form(""),
+                    db: Session = Depends(get_db)):
+    form = {"full_name": full_name, "email": email, "pd_consent": bool(pd_consent)}
+    ctx = {"next": next, "form": form, "errors": {}, "error": None}
+    if password != password2:
+        return page(request, "register.html", {**ctx, "errors": {"password2": "Пароли не совпадают"}}, status_code=422)
+    try:
+        user = accounts.register(db, full_name=full_name, email=email, password=password, pd_consent=bool(pd_consent),
+                                 ip=request.client.host if request.client else None)
+    except TooManyAttempts as e:
+        return page(request, "register.html", {**ctx, "error": str(e)}, status_code=429)
+    except DomainError as e:
+        db.rollback()
+        return page(request, "register.html", {**ctx, "errors": e.details or {}}, status_code=e.status_code)
+    start_session(request, db, user)  # коммитит и регистрацию
+    flash(request, "Аккаунт создан. Добавьте компанию по ИНН — данные подставим из реестра.")
+    return RedirectResponse(safe_next(next) if next else "/company", 303)
+
+
+def _account_ctx(request: Request, db: Session, user: User, **extra) -> dict[str, Any]:
+    ctx: dict[str, Any] = {"user": user, "nav": "account", "errors": {}}
+    if user.role == "CLIENT":
+        ctx["company"], ctx["companies"] = active_company(request, db, user)
+    return {**ctx, **extra}
+
+
+@router.get("/account", response_class=HTMLResponse)
+def account_page(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return page(request, "account.html", _account_ctx(request, db, user))
+
+
+@router.post("/account/password", dependencies=[Depends(verify_csrf)])
+def account_password(request: Request, current: str = Form(""), new: str = Form(""), new2: str = Form(""),
+                     db: Session = Depends(get_db), user: User = Depends(current_user)):
+    if new != new2:
+        return page(request, "account.html", _account_ctx(request, db, user, errors={"new2": "Пароли не совпадают"}),
+                    status_code=422)
+    try:
+        accounts.change_password(db, user, current=current, new=new)
+    except DomainError as e:
+        db.rollback()
+        return page(request, "account.html", _account_ctx(request, db, user, errors=e.details or {}),
+                    status_code=e.status_code)
+    start_session(request, db, user)  # новая сессия после смены пароля
+    flash(request, "Пароль изменён")
+    return RedirectResponse("/account", 303)
 
 
 @router.post("/logout", dependencies=[Depends(verify_csrf)])

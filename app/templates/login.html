@@ -13,6 +13,7 @@
 <div class="field"><label for="password">Пароль</label><input class="txt" id="password" name="password" type="password" autocomplete="current-password" required></div>
 <button class="btn primary lg" type="submit">Войти</button>
 </form>
+<p class="small" style="margin:0">Нет аккаунта? <a href="/register{% if next %}?next={{ next|urlencode }}{% endif %}">Зарегистрироваться</a> — для представителей бизнеса</p>
 <div class="stack-sm">
 <span class="lbl">Демо-пользователи <span class="muted small">· пароль у всех: demo</span></span>
 <div class="demo-users">

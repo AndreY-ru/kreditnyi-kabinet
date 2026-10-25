@@ -11,7 +11,7 @@ from app.models import Application, AuditLog, Company, CompanyMember, Product, S
 from app.security import TooManyAttempts, admin_user, authenticate, bank_user, client_user, current_user, start_session
 from app.services import analyst as analyst_svc
 from app.services import applications as svc
-from app.services import client_message, intake, precheck
+from app.services import accounts, client_message, intake, precheck
 from app.services.catalog import match_products
 from app.services.companies import add_company_by_inn, invite_member, require_member, self_check, user_companies
 from app.services.views import application_view, history_rows, label
@@ -48,6 +48,19 @@ def login(body: s.LoginIn, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(429, str(e), headers={"Retry-After": str(e.retry_after)}) from None
     if user is None:
         raise HTTPException(401, "Неверный email или пароль")
+    start_session(request, db, user)
+    return user
+
+
+@router.post("/auth/register", response_model=s.UserOut, status_code=201, tags=["auth"],
+             responses={422: {"model": s.Error}, 429: {"model": s.Error}})
+def register(body: s.RegisterIn, request: Request, db: Session = Depends(get_db)):
+    """Регистрация представителя бизнеса. Дальше — POST /api/companies с ИНН."""
+    try:
+        user = accounts.register(db, full_name=body.full_name, email=body.email, password=body.password,
+                                 pd_consent=body.pd_consent, ip=request.client.host if request.client else None)
+    except TooManyAttempts as e:
+        raise HTTPException(429, str(e), headers={"Retry-After": str(e.retry_after)}) from None
     start_session(request, db, user)
     return user
 
