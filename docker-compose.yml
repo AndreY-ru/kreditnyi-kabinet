@@ -6,7 +6,7 @@ name: kreditnyi-kabinet
 
 x-app-env: &app-env
   DATABASE_URL: postgresql+psycopg://kabinet:${POSTGRES_PASSWORD:-kabinet}@db:5432/kabinet
-  SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+  SECRET_KEY: ${SECRET_KEY:-}  # не задан — случайный при каждом старте (см. app/config.py)
   FNS_MOCK_URL: http://fns-mock:8101
   BKI_MOCK_URL: http://bki-mock:8102
   UPLOAD_DIR: /data/uploads

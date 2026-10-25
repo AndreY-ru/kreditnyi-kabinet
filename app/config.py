@@ -1,7 +1,9 @@
 """Настройки приложения. Всё берётся из переменных окружения (секреты не хранятся в коде)."""
 from __future__ import annotations
 
+import logging
 import os
+import secrets
 from dataclasses import dataclass, field
 
 
@@ -11,6 +13,24 @@ def _bool(value: str | None, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+# Секреты, которые когда-либо лежали в репозитории или примерах. Они публичны: подписанную ими cookie сессии
+# может сделать кто угодно и войти под любым пользователем. Поэтому их не используем никогда.
+KNOWN_DEMO_SECRETS = ("change-me-in-production", "dev-only-change-me", "change-me")
+
+
+def resolve_secret(value: str | None) -> str:
+    """SECRET_KEY из окружения, а если не задан или публичный — случайный на время работы процесса.
+
+    Случайный секрет надёжен, но при перезапуске все выходят из кабинета, а у нескольких копий приложения
+    он разный. Для постоянного развёртывания задайте свой SECRET_KEY в .env.
+    """
+    value = (value or "").strip()
+    if not value or value in KNOWN_DEMO_SECRETS:
+        logging.getLogger(__name__).warning("SECRET_KEY не задан или публичный — используем случайный на время работы")
+        return secrets.token_urlsafe(48)
+    return value
+
+
 @dataclass
 class Settings:
     database_url: str = field(
@@ -18,7 +38,7 @@ class Settings:
             "DATABASE_URL", "postgresql+psycopg://kabinet:kabinet@localhost:5432/kabinet"
         )
     )
-    secret_key: str = field(default_factory=lambda: os.getenv("SECRET_KEY", "dev-only-change-me"))
+    secret_key: str = field(default_factory=lambda: resolve_secret(os.getenv("SECRET_KEY")))
     secure_cookies: bool = field(default_factory=lambda: _bool(os.getenv("SECURE_COOKIES"), False))
 
     # Моки внешних сервисов (отдельные контейнеры)

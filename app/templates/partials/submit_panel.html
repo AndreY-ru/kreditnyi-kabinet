@@ -1,9 +1,9 @@
 <div id="submit-panel" class="stack">
 {% if ready %}
-<form method="post" action="/applications/{{ app.id }}/submit">
+<form method="post" action="/applications/{{ app.id }}/submit" data-busy="Отправляем…">
 <input type="hidden" name="csrf_token" value="{{ csrf }}">
 <input type="hidden" name="idem" value="{{ idem }}">
-<button type="submit" class="btn primary xl" onclick="this.disabled=true;this.form.submit()">Отправить заявку</button>
+<button type="submit" class="btn primary xl">Отправить заявку</button>
 </form>
 {% else %}
 <button type="button" disabled aria-describedby="why-disabled" class="btn xl">Отправить заявку</button>

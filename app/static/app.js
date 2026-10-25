@@ -6,9 +6,18 @@
   });
 
   // Долгая отправка формы (разбор текста моделью): блокируем кнопку и показываем, что идёт работа
+  // Подтверждение необратимых действий (вместо inline onsubmit — их запрещает CSP)
+  document.addEventListener('submit', function (e) {
+    var msg = e.target.getAttribute('data-confirm');
+    if (msg && !window.confirm(msg)) e.preventDefault();
+  }, true);
+  // Выбор в списке сразу применяет фильтр
+  document.addEventListener('change', function (e) {
+    if (e.target.matches('select[data-autosubmit]')) e.target.form.submit();
+  });
   document.addEventListener('submit', function (e) {
     var f = e.target;
-    if (!f.matches('[data-busy]')) return;
+    if (e.defaultPrevented || !f.matches('[data-busy]')) return;
     var b = f.querySelector('button[type=submit]');
     if (b) { b.disabled = true; b.textContent = f.getAttribute('data-busy'); }
   });

@@ -28,7 +28,7 @@
 <label for="q" class="sr">Поиск по номеру или ИНН</label>
 <input id="q" name="q" type="search" value="{{ q }}" placeholder="Номер заявки или ИНН" class="txt sm" style="width:240px">
 <label for="prod" class="sr">Продукт</label>
-<select id="prod" name="product" class="sel sm" onchange="this.form.submit()">
+<select id="prod" name="product" class="sel sm" data-autosubmit>
 <option value="">Все продукты</option>
 {% for p in products %}<option value="{{ p.code }}" {% if product == p.code %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
 </select>

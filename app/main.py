@@ -25,6 +25,12 @@ from app.web.common import router as common_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
+# Скрипты — только свои файлы (никаких inline-обработчиков и сторонних CDN); стили inline разрешены — шаблоны
+# по макетам используют атрибут style. Встраивать кабинет в чужие сайты нельзя.
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+       "font-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; "
+       "object-src 'none'")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -48,6 +54,18 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, session_cookie="kabinet_session",
                        same_site="lax", https_only=settings.secure_cookies, max_age=60 * 60 * 12)
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        h = response.headers
+        h.setdefault("X-Content-Type-Options", "nosniff")
+        h.setdefault("X-Frame-Options", "DENY")  # кабинет нельзя встроить в чужой сайт (clickjacking)
+        h.setdefault("Referrer-Policy", "same-origin")
+        h.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        if not request.url.path.startswith("/api/docs"):  # Swagger грузит скрипты с CDN
+            h.setdefault("Content-Security-Policy", CSP)
+        return response
+
     app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
     app.include_router(api_router)
     app.include_router(common_router)

@@ -11,7 +11,7 @@
 <span class="muted">{{ app.product.name }} · запрошено {{ app.amount|money }} на {{ app.term_months }} мес. · цель: {{ GOAL_PURPOSE.get(app.goal, app.goal) }}{% if app.submitted_at %} · отправлена {{ app.submitted_at|dt('%d.%m.%Y в %H:%M') }}{% endif %}</span>
 </div>
 {% if app.status in ('NEEDS_CORRECTION', 'NEEDS_INFO') %}
-<form method="post" action="/applications/{{ app.id }}/withdraw" onsubmit="return confirm('Отозвать заявку? Это действие нельзя отменить.')">
+<form method="post" action="/applications/{{ app.id }}/withdraw" data-confirm="Отозвать заявку? Это действие нельзя отменить.">
 <input type="hidden" name="csrf_token" value="{{ csrf }}"><button type="submit" class="btn" style="font-weight:500">Отозвать заявку</button></form>
 {% endif %}
 </div>
