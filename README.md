@@ -566,19 +566,19 @@ docs/            исследование и модель процесса (rese
 <a href="https://github.com/AndreY-ru"><img src="https://github.com/AndreY-ru.png?size=160" width="96" alt="Андрей"></a><br>
 <b>Андрей</b><br>
 <sub><a href="https://github.com/AndreY-ru">@AndreY-ru</a></sub><br><br>
-Код: сайт, конвейер заявки, скоринг, ИИ-помощники, Docker
+backend-разработчик
 </td>
 <td align="center" width="33%" valign="top">
 <a href="https://github.com/katy-kon"><img src="https://github.com/katy-kon.png?size=160" width="96" alt="Екатерина"></a><br>
 <b>Екатерина</b><br>
 <sub><a href="https://github.com/katy-kon">@katy-kon</a></sub><br><br>
-Дизайн интерфейса и анализ
+Product/UX/Business analyst
 </td>
 <td align="center" width="33%" valign="top">
 <a href="https://github.com/y4b0hue418"><img src="https://github.com/y4b0hue418.png?size=160" width="96" alt="Михаил"></a><br>
 <b>Михаил</b><br>
 <sub><a href="https://github.com/y4b0hue418">@y4b0hue418</a></sub><br><br>
-Обзор и разбор решения, презентация
+frontend-разработчик
 </td>
 </tr>
 </table>
