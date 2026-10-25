@@ -10,6 +10,18 @@ from app.domain.transitions import DomainError, Forbidden, NotFound, ValidationF
 from app.models import AuditLog, Company, CompanyMember, Product, User, utcnow
 from app.services import integrations
 
+# Должность в команде выбирают из списка, своё не вписать. Права задаёт не должность, а флаги «оформляет»
+# и «подписывает»: бухгалтер с доверенностью может подписывать, а директор может доверить подпись другому.
+POSITIONS = ("Генеральный директор", "Индивидуальный предприниматель", "Учредитель", "Финансовый директор",
+             "Главный бухгалтер", "Бухгалтер", "Бухгалтер на аутсорсе", "Юрист", "Менеджер")
+
+
+def check_position(position: str | None) -> str:
+    position = " ".join((position or "").split())
+    if position not in POSITIONS:
+        raise ValidationFailed("Выберите должность из списка", code="position_invalid")
+    return position
+
 
 def inn_is_valid(inn: str) -> bool:
     if not inn.isdigit() or len(inn) not in (10, 12):
@@ -61,7 +73,7 @@ def require_member(db: Session, user: User, company_id: int, *, apply: bool = Fa
 
 def add_member(db: Session, company: Company, user: User, *, position: str, can_apply: bool = True,
                can_sign: bool = False, authority: str | None = None, actor: User | None = None) -> CompanyMember:
-    m = CompanyMember(user_id=user.id, company_id=company.id, position=position or "Представитель",
+    m = CompanyMember(user_id=user.id, company_id=company.id, position=check_position(position),
                       can_apply=can_apply, can_sign=can_sign, authority=authority)
     db.add(m)
     db.add(AuditLog(actor_id=(actor or user).id, action="company.member_add", entity="company", entity_id=company.id,
@@ -77,7 +89,7 @@ def add_company_by_inn(db: Session, user: User, inn: str, position: str, authori
     подтверждаются ЭП или доверенностью — здесь смоделировано). Остальных сотрудников добавляет
     руководитель с правом подписи (invite_member): иначе любой клиент получил бы доступ к чужим заявкам по ИНН.
     """
-    inn = inn.strip()
+    inn, position = inn.strip(), check_position(position)
     if not inn_is_valid(inn):
         raise ValidationFailed("Проверьте ИНН: 10 цифр для организации, 12 для ИП", code="inn_invalid")
     company = db.scalar(select(Company).where(Company.inn == inn))
@@ -111,6 +123,7 @@ def invite_member(db: Session, inviter: User, company_id: int, *, email: str, po
     m = require_member(db, inviter, company_id)
     if not m.can_sign:
         raise Forbidden("Добавлять сотрудников может руководитель с правом подписи", code="no_sign_right")
+    position = check_position(position)
     target = db.scalar(select(User).where(User.email == email.strip().lower()))
     if target is None or target.role != "CLIENT":
         raise NotFound("Такого email в кабинете нет. Попросите коллегу зарегистрироваться (ссылка на странице "

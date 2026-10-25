@@ -158,7 +158,7 @@ def _parse_rate(value: Any) -> Decimal:
         rate = Decimal(str(value).replace(",", ".").strip())
     except (InvalidOperation, AttributeError):
         raise ValidationFailed("Укажите ставку числом, например 21,5", code="bad_rate") from None
-    if not (Decimal("0") < rate < Decimal("100")):
+    if not rate.is_finite() or not (Decimal("0") < rate < Decimal("100")):  # «NaN» и «Infinity» — тоже Decimal
         raise ValidationFailed("Ставка должна быть от 0 до 100%", code="bad_rate")
     return rate.quantize(Decimal("0.01"))
 
@@ -214,9 +214,11 @@ def decide(
         db.add(d)
         _close_tasks(db, app)
     else:  # info
-        if not (doc_kind or "").strip():
+        if (doc_kind or "").strip() not in DOC_KINDS:
             raise ValidationFailed("Выберите, что запросить у клиента", code="doc_required")
         days = due_days or settings.info_request_days
+        if not 1 <= days <= 30:
+            raise ValidationFailed("Срок ответа — от 1 до 30 дней", code="bad_due_days")
         transition(db, app, S.NEEDS_INFO, event="Запрос данных", actor=actor, reason=comment.strip(),
                    expected_version=expected_version)
         db.add(InfoRequest(application_id=app.id, requested_by=user.id, doc_kind=doc_kind.strip(),

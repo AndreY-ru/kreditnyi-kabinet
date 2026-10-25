@@ -10,7 +10,7 @@ NEW_CO = "7713550120"  # ООО «Новый горизонт»: в демо н�
 def test_cannot_join_foreign_company_by_inn(anna, elena):
     """Раньше любой клиент вводил чужой ИНН и получал заявки компании, мог принять и подписать кредит."""
     app = draft(anna, SV, "WORKING", 1_000_000, 12)
-    r = elena.post("/api/companies", json={"inn": SV, "position": "кто угодно"})
+    r = elena.post("/api/companies", json={"inn": SV, "position": "Генеральный директор"})
     assert r.status_code == 403 and r.json()["error"] == "company_taken"
     assert elena.get(f"/api/applications/{app['id']}").status_code == 404
     assert SV not in [c["inn"] for c in elena.get("/api/companies").json()]
@@ -64,8 +64,9 @@ def test_login_next_is_not_open_redirect():
     from app.web.common import safe_next
 
     assert safe_next("/applications/1") == "/applications/1"
-    for bad in ("//evil.example", "/\\evil.example", "https://evil.example", "/x\nLocation: //evil"):
-        assert safe_next(bad) == "/"
+    for bad in ("//evil.example", "/\\evil.example", "https://evil.example", "/x\nLocation: //evil",
+                "/\t/evil.example", "/\r/evil.example", "/\x00/evil.example"):  # браузер выбросит \t и \r — «//»
+        assert safe_next(bad) == "/", repr(bad)
 
 
 def test_team_member_can_be_removed_but_not_the_last_signer(anna, igor):

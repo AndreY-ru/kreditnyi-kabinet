@@ -22,6 +22,7 @@ from app.security import TooManyAttempts, hash_password, verify_password
 
 MIN_PASSWORD = 8
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_NAME = re.compile(r"^[A-Za-zА-Яа-яЁё]+(?:[ '’.\-]+[A-Za-zА-Яа-яЁё]+)*\.?$")  # «Анна-Мария Петрова», «Петров И. О.»
 _WEAK = {"password", "password1", "12345678", "123456789", "1234567890", "qwertyui", "qwerty123", "11111111",
          "00000000", "йцукенгш", "demodemo", "kabinet1"}
 PD_CONSENT_VERSION = "v1"
@@ -45,8 +46,8 @@ def register(db: Session, *, full_name: str, email: str, password: str, pd_conse
         raise TooManyAttempts(wait)
     email, full_name = email.strip().lower(), " ".join(full_name.split())
     errors: dict[str, str] = {}
-    if not 2 <= len(full_name) <= 255:
-        errors["full_name"] = "Укажите фамилию и имя"
+    if len(full_name) > 100 or len(full_name.split()) < 2 or not _NAME.match(full_name):
+        errors["full_name"] = "Укажите фамилию и имя буквами, например «Ольга Новикова»"
     if not _EMAIL.match(email) or len(email) > 255:
         errors["email"] = "Проверьте email"
     if problems := password_problems(password, email):

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import httpx
 import pytest
@@ -120,16 +121,24 @@ def test_describe_fills_podbor_form_and_shows_how_understood():
     c = web_login("anna@demo.local")
     r = c.post("/podbor/describe", data={"text": SEASON})
     assert r.status_code == 200 and "/podbor?" in str(r.url)
-    assert "Поняли так" in r.text and "3 000 000 ₽" in r.text and "есть залог" in r.text
+    assert "Поняли так" in r.text and "3 000 000 ₽" in r.text and "залог: транспорт и спецтехника" in r.text
     assert 'value="working" checked' in r.text and 'id="t-6" name="term" value="6" checked' in r.text
     assert "Подходит под вашу задачу" in r.text  # продукты уже подобраны
+    # вид залога из описания: отмечен в подборе, уходит в кнопку «Оформить» и доезжает до черновика
+    assert 'id="pc-VEHICLE" name="collateral_kind" value="VEHICLE" checked' in r.text
+    form = re.search(r'<form method="post" action="/applications/new".*?</form>', r.text, re.S).group(0)
+    fields = dict(re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)">', form))
+    assert fields["collateral_kind"] == "VEHICLE"
+    r = c.post("/applications/new", data=fields)
+    assert r.status_code == 200 and 'id="zc-VEHICLE" name="collateral_kind" value="VEHICLE" checked' in r.text
 
 
 def test_parse_api(anna):
     r = anna.post("/api/podbor/parse", json={"text": SEASON})
     assert r.status_code == 200
     assert r.json() | {"summary": ""} == {"goal": "working", "amount": 3_000_000, "term_months": 6,
-                                          "has_collateral": True, "has_guarantor": None, "source": "rules",
+                                          "has_collateral": True, "collateral_kind": "VEHICLE",
+                                          "has_guarantor": None, "source": "rules",
                                           "missing": [], "summary": ""}
 
 

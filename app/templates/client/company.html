@@ -52,7 +52,7 @@
 {% if invite_error %}<span class="err" role="alert">{{ invite_error }}</span>{% endif %}
 <div class="grid2" style="gap:12px">
 <div class="field"><label for="inv-email">Email в кабинете</label><input class="txt" id="inv-email" name="email" type="email" required placeholder="elena@demo.local"></div>
-<div class="field"><label for="inv-pos">Должность</label><input class="txt" id="inv-pos" name="position" placeholder="Главный бухгалтер"></div>
+<div class="field"><label for="inv-pos">Должность</label><select class="sel" id="inv-pos" name="position">{% for pos in positions %}<option{% if pos == 'Бухгалтер' %} selected{% endif %}>{{ pos }}</option>{% endfor %}</select></div>
 </div>
 <label class="cb"><input type="checkbox" name="can_sign" value="1"><span class="m">Может подписывать договоры</span></label>
 <button class="btn self-start" type="submit">Добавить в команду</button>
@@ -76,7 +76,7 @@
 <span class="hint">Например, 7713550120 — синтетическая ООО «Новый горизонт», ещё не подключена</span>
 </div>
 <p class="xs muted" style="margin:0">Если компания уже подключена к кабинету, доступ к ней выдаёт её руководитель.</p>
-<div class="field"><label for="position">Ваша должность</label><input class="txt" id="position" name="position" value="Финансовый директор"></div>
+<div class="field"><label for="position">Ваша должность</label><select class="sel" id="position" name="position">{% for pos in positions %}<option{% if pos == 'Генеральный директор' %} selected{% endif %}>{{ pos }}</option>{% endfor %}</select></div>
 <button class="btn primary" type="submit">Найти и добавить</button>
 </form>
 </aside>

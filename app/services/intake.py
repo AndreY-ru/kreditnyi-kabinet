@@ -18,6 +18,7 @@ from dataclasses import dataclass, field, replace
 
 from app.services import llm
 from app.services.catalog import GOALS, TERMS
+from app.services.scoring import DEFAULT_MODEL
 
 # --- Числа в тексте ---------------------------------------------------------------------------
 
@@ -123,6 +124,15 @@ _GOAL_RULES = [  # порядок важен: от более конкретно
 ]
 _NO_COLLATERAL = re.compile(r"без залога|залога нет|нечего (заложить|в залог)|нет залога")
 _COLLATERAL = re.compile(r"залог|заложить|под обеспечени")
+# Что в залоге: берём вид имущества, названный ближе всего к слову «залог» («закупка товара» — это цель)
+_COLLATERAL_KINDS = [
+    ("REAL_ESTATE", r"недвижим|помещени|склад|здани|квартир|офис|земл|участ|цех"),
+    ("VEHICLE", r"грузовик|машин|автомоб|транспорт|спецтехник|трактор|фургон|экскаватор|газел"),
+    ("EQUIPMENT", r"оборудовани|станк|станок|линию|линия"),
+    ("GOODS", r"товар|запас|сырь|продукци"),
+    ("DEPOSIT", r"депозит|вклад"),
+]
+_KIND_NAMES = {k: v["name"] for k, v in DEFAULT_MODEL["credit"]["collateral"].items()}
 _NO_GUARANTOR = re.compile(r"без поручит|поручител\w* нет|нет поручител")
 _GUARANTOR = re.compile(r"поручит|поручусь|поручиться")
 
@@ -133,6 +143,7 @@ class Intake:
     amount: int | None = None
     term: int | None = None
     collateral: bool | None = None
+    collateral_kind: str | None = None
     guarantor: bool | None = None
     source: str = "rules"  # rules — только правила; llm — модель заполнила пробелы (model_filled)
     notes: list[str] = field(default_factory=list)
@@ -151,7 +162,8 @@ class Intake:
         if self.term:
             parts.append(f"на {self.term} мес.")
         if self.collateral is not None:
-            parts.append("есть залог" if self.collateral else "без залога")
+            kind = _KIND_NAMES.get(self.collateral_kind or "")
+            parts.append(("залог: " + kind.lower() if kind else "есть залог") if self.collateral else "без залога")
         if self.guarantor is not None:
             parts.append("с поручительством собственника" if self.guarantor else "без поручителя")
         return ", ".join(parts)
@@ -166,8 +178,21 @@ def parse_rules(text: str) -> Intake:
     if terms:
         res.term = terms[0][1]
     res.collateral = False if _NO_COLLATERAL.search(t) else (True if _COLLATERAL.search(t) else None)
+    if res.collateral:
+        res.collateral_kind = collateral_kind(t)
     res.guarantor = False if _NO_GUARANTOR.search(t) else (True if _GUARANTOR.search(t) else None)
     return res
+
+
+def collateral_kind(t: str) -> str | None:
+    anchors = [m.start() for m in _COLLATERAL.finditer(t)]
+    best = None
+    for kind, rx in _COLLATERAL_KINDS:
+        for m in re.finditer(rx, t):
+            dist = min(abs(m.start() - a) for a in anchors)
+            if dist <= 40 and (best is None or dist < best[0]):
+                best = (dist, kind)
+    return best[1] if best else None
 
 
 def _pick_amount(t: str, money: list[tuple[int, int]]) -> int | None:

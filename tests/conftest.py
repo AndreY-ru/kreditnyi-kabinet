@@ -6,7 +6,9 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-os.environ.setdefault("DATABASE_URL", os.getenv("TEST_DATABASE_URL", "sqlite://"))
+# Только TEST_DATABASE_URL или SQLite в памяти: тесты пересоздают таблицы, и DATABASE_URL из окружения
+# (рабочая база контейнера или локальной разработки) не должен им достаться
+os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL", "sqlite://")
 
 from app import db as dbm  # noqa: E402
 from app import security  # noqa: E402
@@ -24,6 +26,7 @@ settings.enrich_retry_delay = 0
 @pytest.fixture(autouse=True)
 def _env(tmp_path):
     settings.upload_dir = str(tmp_path / "uploads")
+    os.environ["MOCK_DATA_DIR"] = str(tmp_path / "mocks")  # правки тестовых данных моков — свои у каждого теста
     settings.database_url = os.environ["DATABASE_URL"]
     engine = dbm.init_engine(settings.database_url)
     Base.metadata.drop_all(engine)

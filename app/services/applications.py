@@ -45,6 +45,7 @@ from app.models import (
 )
 from app.services import integrations
 from app.services.companies import require_member
+from app.services.scoring import DEFAULT_MODEL
 from app.services.validation import active_consent, validate
 
 BUREAU = "[Название БКИ] · смоделировано"
@@ -94,12 +95,29 @@ def last_complete_application(db: Session, company_id: int, exclude_id: int | No
     return db.scalar(stmt)
 
 
+COLLATERAL_KINDS = {k: v["name"] for k, v in DEFAULT_MODEL["credit"]["collateral"].items()}
+MAX_MONEY = 10**15  # квадриллион ₽: больше не бывает, а без проверки число переполнит BIGINT и уронит запрос
+_LIMITS = {"amount": ("Сумма", MAX_MONEY), "term_months": ("Срок", 1200), "revenue": ("Выручка", MAX_MONEY),
+           "expenses": ("Расходы", MAX_MONEY), "ebit": ("Прибыль", MAX_MONEY),
+           "amortization": ("Амортизация", MAX_MONEY), "employees": ("Сотрудники", 1_000_000),
+           "balance": ("Остаток долга", MAX_MONEY), "monthly_payment": ("Платёж в месяц", MAX_MONEY),
+           "collateral_value": ("Стоимость залога", MAX_MONEY)}
+
+
+def check_numbers(values: dict[str, Any]) -> None:
+    for name, v in values.items():
+        if name in _LIMITS and isinstance(v, int) and abs(v) > _LIMITS[name][1]:
+            raise ValidationFailed(f"Слишком большое число в поле «{_LIMITS[name][0]}» — проверьте",
+                                   code="number_too_large", details={"field": name})
+
+
 def create_draft(
     db: Session, user: User, company: Company, product: Product, *,
     amount: int, term_months: int, goal: str, has_collateral: bool, has_guarantor: bool,
 ) -> Application:
     require_member(db, user, company.id, apply=True)
     _require_active(product)
+    check_numbers({"amount": amount, "term_months": term_months})
     app = Application(
         company_id=company.id, product_id=product.id, created_by=user.id, amount=amount,
         term_months=term_months, goal=goal, has_collateral=has_collateral, has_guarantor=has_guarantor,
@@ -144,15 +162,20 @@ def _require_active(product: Product | None) -> None:
 def update_params(db: Session, app: Application, *, amount: int | None = None, term_months: int | None = None,
                   goal: str | None = None, has_collateral: bool | None = None,
                   has_guarantor: bool | None = None, collateral_desc: str | None = None,
+                  collateral_kind: str | None = None, collateral_value: int | None = None,
                   product_id: int | None = None) -> Application:
     _require_editable(app)
+    check_numbers({"amount": amount, "term_months": term_months, "collateral_value": collateral_value})
+    if collateral_kind is not None and collateral_kind not in COLLATERAL_KINDS:
+        raise ValidationFailed("Выберите, что в залоге, из списка", code="collateral_kind_invalid")
     if product_id is not None and product_id != app.product_id:
         product = db.get(Product, product_id)
         _require_active(product)
         app.product = product  # через связь, чтобы app.product не остался прежним до конца сессии
     for name, value in (("amount", amount), ("term_months", term_months), ("goal", goal),
                         ("has_collateral", has_collateral), ("has_guarantor", has_guarantor),
-                        ("collateral_desc", collateral_desc)):
+                        ("collateral_desc", collateral_desc[:500] if collateral_desc else collateral_desc),
+                        ("collateral_kind", collateral_kind), ("collateral_value", collateral_value)):
         if value is not None:
             setattr(app, name, value)
     app.updated_at = utcnow()
@@ -163,6 +186,9 @@ def update_params(db: Session, app: Application, *, amount: int | None = None, t
 def update_financials(db: Session, app: Application, data: dict[str, Any],
                       liabilities: list[dict[str, Any]] | None = None) -> Application:
     _require_editable(app)
+    check_numbers(data)
+    for liab in liabilities or []:
+        check_numbers(liab)
     fin = app.financials or FinancialIndicators(application_id=app.id)
     for key in ("revenue", "expenses", "ebit", "amortization", "employees", "revenue_trend"):
         if key in data:
@@ -173,8 +199,10 @@ def update_financials(db: Session, app: Application, data: dict[str, Any],
         app.liabilities.clear()
         db.flush()
         for i, l in enumerate(liabilities):
-            app.liabilities.append(Liability(position=i, creditor=l["creditor"], balance=l["balance"],
-                                             monthly_payment=l.get("monthly_payment") or 0, maturity=l.get("maturity")))
+            # длину режем под колонки; формат срока погашения проверит validate() и покажет ошибку у строки
+            app.liabilities.append(Liability(position=i, creditor=" ".join(str(l["creditor"]).split())[:120],
+                                             balance=l["balance"], monthly_payment=l.get("monthly_payment") or 0,
+                                             maturity=(l.get("maturity") or "").strip()[:20] or None))
     app.updated_at = utcnow()
     db.flush()
     return app
@@ -230,6 +258,7 @@ def build_snapshot(db: Session, app: Application) -> dict[str, Any]:
         "product": {"code": app.product.code, "version": app.product.version, "name": app.product.name},
         "amount": app.amount, "term_months": app.term_months, "goal": app.goal,
         "has_collateral": app.has_collateral, "collateral_desc": app.collateral_desc,
+        "collateral_kind": app.collateral_kind, "collateral_value": app.collateral_value,
         "has_guarantor": app.has_guarantor,
         "company": {"inn": c.inn, "ogrn": c.ogrn, "name": c.name, "kind": c.kind, "status": c.status,
                     "registered_at": c.registered_at.isoformat() if c.registered_at else None},
@@ -432,7 +461,8 @@ def sign(db: Session, app: Application, user: User) -> Application:
         raise Forbidden(f"Договор подписывает сотрудник с правом подписи: {names}", code="no_sign_right")
     contract = db.scalar(select(Contract).where(Contract.application_id == app.id))
     offer = active_offer(db, app)
-    assert contract is not None and offer is not None
+    if contract is None or offer is None:
+        raise InvalidTransition("Нет договора или действующего предложения для подписи", code="not_signing")
     contract.status = "SIGNED"
     contract.signed_at = utcnow()
     contract.signed_by = user.id

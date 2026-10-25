@@ -92,8 +92,11 @@ def login_submit(request: Request, email: str = Form(...), password: str = Form(
 
 
 def safe_next(target: str) -> str:
-    """Только относительный путь внутри сайта. «/\\evil.com» браузер понимает как «//evil.com»."""
-    if target.startswith("/") and not target.startswith("//") and "\\" not in target and "\n" not in target:
+    """Только относительный путь внутри сайта. «/\\evil.com» браузер понимает как «//evil.com», а табуляцию и
+    переводы строк из адреса выбрасывает: «/<TAB>/evil.com» тоже стал бы «//evil.com». Управляющие символы — отказ."""
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in target):
+        return "/"
+    if target.startswith("/") and not target.startswith("//") and "\\" not in target:
         return target
     return "/"
 
