@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from mocks.data import get_company, overrides, save_override
 
-app = FastAPI(title="BKI mock (смоделировано)", version="1.2.0")
+app = FastAPI(title="BKI mock (смоделировано)", version="1.2.1")
 FAIL_RATE = float(os.getenv("BKI_FAIL_RATE", "0"))
 
 

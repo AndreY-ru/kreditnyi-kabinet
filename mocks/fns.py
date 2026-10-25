@@ -26,7 +26,7 @@ from mocks.data import (
     save_override,
 )
 
-app = FastAPI(title="FNS mock (смоделировано)", version="1.2.0")
+app = FastAPI(title="FNS mock (смоделировано)", version="1.2.1")
 FAIL_RATE = float(os.getenv("FNS_FAIL_RATE", "0"))
 EXTRA_DOWN = {x.strip() for x in os.getenv("FNS_FAIL_INNS", "").split(",") if x.strip()}
 

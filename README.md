@@ -10,7 +10,7 @@ MVP для хакатона «Альфа Будущее» (кейс Альфа-�
 
 ### [→ Запуск одной командой: `docker compose up --build`](#запуск)
 
-[![Версия](https://img.shields.io/badge/версия-1.2.0-e30611)](https://github.com/AndreY-ru/kreditnyi-kabinet/releases/tag/v1.2.0)
+[![Версия](https://img.shields.io/badge/версия-1.2.1-e30611)](https://github.com/AndreY-ru/kreditnyi-kabinet/releases/tag/v1.2.1)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.162-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
@@ -65,7 +65,7 @@ MVP для хакатона «Альфа Будущее» (кейс Альфа-�
 
 # Как это выглядит
 
-Все кадры сняты автоматически на демо-данных версии 1.2.0 с включённой моделью: никакой подготовки экранов
+Все кадры сняты автоматически на демо-данных версии 1.2.1 с включённой моделью: никакой подготовки экранов
 вручную, это работающий прототип.
 
 ## Кабинет клиента
@@ -558,7 +558,7 @@ docs/            исследование и модель процесса (rese
 ---
 
 <div align="center">
-<sub>Версия 1.2.0. Все данные синтетические. ФНС, БКИ, подписание и выдача смоделированы.<br>
+<sub>Версия 1.2.1. Все данные синтетические. ФНС, БКИ, подписание и выдача смоделированы.<br>
 Скриншоты и GIF сняты автоматически (Playwright) на демо-данных, люди и компании на них выдуманы.<br>
 Сторонние компоненты, лицензии и смоделированные интеграции — в <a href="THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES.md</a>.</sub>
 </div>
