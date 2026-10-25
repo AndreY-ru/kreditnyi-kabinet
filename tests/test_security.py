@@ -81,3 +81,22 @@ def test_inactive_user_cannot_log_in_via_api(db):
     u.is_active = False
     db.commit()
     assert TestClient(app).post("/api/auth/login", json={"email": "elena@demo.local", "password": "demo"}).status_code == 401
+
+
+def test_oversized_request_is_rejected_before_parsing(monkeypatch):
+    from app.config import settings
+    from app.main import app
+
+    monkeypatch.setattr(settings, "max_upload_mb", 0)  # лимит запроса — 1 МБ
+    r = TestClient(app).post("/api/applications/1/info-response", files={"files": ("big.pdf", b"x" * 1_200_000)})
+    assert r.status_code == 413 and r.json()["error"] == "too_large"
+
+
+def test_file_over_limit_is_not_read_whole(anna, monkeypatch):
+    from app.config import settings
+    from tests.helpers import SV, draft
+
+    monkeypatch.setattr(settings, "max_upload_mb", 1)
+    app = draft(anna, SV, "WORKING", 1_000_000, 12)
+    r = anna.post(f"/api/applications/{app['id']}/info-response", files={"files": ("big.pdf", b"x" * 1_100_000)})
+    assert r.status_code == 422 and r.json()["error"] == "file_too_large"

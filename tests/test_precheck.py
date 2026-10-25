@@ -77,6 +77,10 @@ def test_check_page_and_live_results_render():
     assert 'href="/check"' in c.get("/cabinet").text  # кнопка на главной ведёт на проверку, а не в подбор
     page = c.get("/check")
     assert page.status_code == 200 and "Шансы высокие" in page.text
-    part = c.get("/check/results?goal=working&amount=60 000 000&term=12&revenue=84 600 000&profit=6 500 000&debt=0"
-                 "&trend=FLAT&guarantor=1")
+    part = c.post("/check/results", data={"goal": "working", "amount": "60 000 000", "term": "12", "trend": "FLAT",
+                                          "revenue": "84 600 000", "profit": "6 500 000", "debt": "0", "guarantor": "1"})
+    assert c.get("/check/results?revenue=84600000").status_code == 405  # финансы через URL не принимаем
+    nojs = c.post("/check", data={"goal": "working", "amount": "3 000 000", "term": "12", "trend": "FLAT",
+                                  "revenue": "84 600 000", "profit": "6 500 000", "debt": "0", "guarantor": "1"})
+    assert nojs.status_code == 200 and "Шансы" in nojs.text  # форма без JavaScript тоже работает
     assert part.status_code == 200 and "Шансы" in part.text

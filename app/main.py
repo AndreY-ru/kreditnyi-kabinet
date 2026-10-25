@@ -27,6 +27,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 # Скрипты — только свои файлы (никаких inline-обработчиков и сторонних CDN); стили inline разрешены — шаблоны
 # по макетам используют атрибут style. Встраивать кабинет в чужие сайты нельзя.
+MAX_FILES = 5
+
+
+def max_request_bytes() -> int:
+    return (settings.max_upload_mb * MAX_FILES + 1) * 1024 * 1024
+
+
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
        "font-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; "
        "object-src 'none'")
@@ -54,6 +61,15 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, session_cookie="kabinet_session",
                        same_site="lax", https_only=settings.secure_cookies, max_age=60 * 60 * 12)
+    @app.middleware("http")
+    async def limit_body(request: Request, call_next):
+        """Слишком большой запрос отсекаем до разбора: иначе сервер сначала примет и сохранит его целиком."""
+        size = request.headers.get("content-length")
+        if size and size.isdigit() and int(size) > max_request_bytes():
+            msg = f"Слишком большой запрос: файлы — до {settings.max_upload_mb} МБ каждый, не больше {MAX_FILES} за раз"
+            return JSONResponse({"error": "too_large", "message": msg}, status_code=413)
+        return await call_next(request)
+
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)

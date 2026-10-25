@@ -262,7 +262,7 @@ def withdraw(app_id: int, db: Session = Depends(get_db), user: User = Depends(cl
 async def info_response(app_id: int, comment: str = Form(""), files: list[UploadFile] = File(default=[]),
                         db: Session = Depends(get_db), user: User = Depends(client_user)):
     app = svc.get_application(db, user, app_id)
-    payload = [(f.filename or "file", f.content_type, await f.read()) for f in files if f.filename]
+    payload = [(f.filename or "file", f.content_type, await svc.read_upload(f)) for f in files if f.filename]
     svc.respond_info(db, app, user, comment=comment, files=payload)
     db.commit()
     return app_out(db, app)

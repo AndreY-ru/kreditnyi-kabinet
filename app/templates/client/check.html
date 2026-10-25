@@ -9,8 +9,9 @@
 
 <div class="row">
 <form id="check-form" aria-label="Параметры проверки" class="card lg" style="flex:1 1 400px;min-width:0;gap:24px"
-  action="/check" method="get"
-  hx-get="/check/results" hx-target="#check-results" hx-trigger="change, input delay:500ms" hx-swap="innerHTML">
+  action="/check" method="post"
+  hx-post="/check/results" hx-target="#check-results" hx-trigger="change, input delay:500ms" hx-swap="innerHTML">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
 <fieldset class="stack-sm" style="gap:12px">
 <legend class="h3" style="margin-bottom:12px">Для чего нужны деньги?</legend>
 <div class="seg">

@@ -310,6 +310,15 @@ def open_tasks(db: Session, app: Application) -> list[ReviewTask]:
                                                     ReviewTask.closed_at.is_(None))))
 
 
+async def read_upload(f) -> bytes:
+    """Читаем файл не дальше лимита: лишнее в память не грузим."""
+    limit = settings.max_upload_mb * 1024 * 1024
+    content = await f.read(limit + 1)
+    if len(content) > limit:
+        raise ValidationFailed(f"Файл больше {settings.max_upload_mb} МБ", code="file_too_large")
+    return content
+
+
 def save_document(db: Session, app: Application, user: User, *, filename: str, content_type: str | None,
                   content: bytes, kind: str, info_request_id: int | None = None) -> Document:
     ext = os.path.splitext(filename)[1].lower()

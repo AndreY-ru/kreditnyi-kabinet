@@ -291,13 +291,14 @@ def _check_params(q, defaults: dict | None = None) -> precheck.PrecheckParams:
     )
 
 
-@router.get("/check", response_class=HTMLResponse)
-def check_page(request: Request, db: Session = Depends(get_db), user: User = Depends(client_user)):
+@router.api_route("/check", methods=["GET", "POST"], response_class=HTMLResponse)
+async def check_page(request: Request, db: Session = Depends(get_db), user: User = Depends(client_user)):
+    """GET — переход из подбора (цель, сумма, срок); POST — форма без JavaScript: финансы не попадают в URL."""
     ctx = _company_ctx(request, db, user)
     company = ctx["company"]
     if company is None:
         return RedirectResponse("/company", 303)
-    q = dict(request.query_params)
+    q = dict(request.query_params) if request.method == "GET" else dict(await request.form())
     if "amount" not in q:  # первый заход: разумные значения по умолчанию
         q.update(amount="3 000 000", term="12", guarantor="1")
     d = precheck.defaults(db, company)
@@ -307,12 +308,13 @@ def check_page(request: Request, db: Session = Depends(get_db), user: User = Dep
                                                "r": precheck.run(db, company, p)})
 
 
-@router.get("/check/results", response_class=HTMLResponse)
-def check_results(request: Request, db: Session = Depends(get_db), user: User = Depends(client_user)):
+@router.post("/check/results", response_class=HTMLResponse)
+async def check_results(request: Request, db: Session = Depends(get_db), user: User = Depends(client_user)):
+    """Пересчёт на лету. POST, а не GET: выручка и долги компании не должны оседать в URL и логах веб-сервера."""
     company, _ = active_company(request, db, user)
     if company is None:
         return HTMLResponse("")
-    p = _check_params(request.query_params)
+    p = _check_params(await request.form())
     return partial(request, "partials/check_results.html", {"p": p, "r": precheck.run(db, company, p)})
 
 
@@ -482,7 +484,11 @@ async def info_answer(request: Request, app_id: int, comment: str = Form(""),
     app = svc.get_application(db, user, app_id)
     form = await request.form()
     uploads = [f for f in form.getlist("files") if hasattr(f, "filename") and f.filename]
-    payload = [(f.filename, f.content_type, await f.read()) for f in uploads]
+    try:
+        payload = [(f.filename, f.content_type, await svc.read_upload(f)) for f in uploads]
+    except ValidationFailed as e:
+        flash(request, e.message, "err")
+        return RedirectResponse(f"/applications/{app.id}", 303)
     try:
         svc.respond_info(db, app, user, comment=comment, files=payload)
     except ValidationFailed as e:
