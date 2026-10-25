@@ -37,7 +37,7 @@
 <div><dt>Продукт</dt><dd>{{ app.product.name }}</dd></div>
 <div><dt>Сумма и срок</dt><dd>{{ app.amount|money }} · {{ app.term_months }} мес.</dd></div>
 <div><dt>Цель</dt><dd>{{ GOALS.get(app.goal, app.goal) }}</dd></div>
-<div><dt>Обеспечение</dt><dd>{% if app.has_collateral %}Залог{% if app.has_guarantor %} + поручительство{% endif %}{% elif app.has_guarantor %}Поручительство собственника{% else %}Нет{% endif %}</dd></div>
+<div><dt>Обеспечение</dt><dd>{% if app.has_collateral %}{% set c = COLLATERAL.get(app.collateral_kind) %}Залог{% if c %}: {{ c.name|lower }}{% endif %}{% if app.collateral_value %}, {{ app.collateral_value|mln }}{% endif %}{% if app.has_guarantor %} + поручительство{% endif %}{% elif app.has_guarantor %}Поручительство собственника{% else %}Нет{% endif %}</dd></div>
 <div><dt>Выручка, 12 мес.</dt><dd>{{ f.revenue|mln if f else '—' }}{% if f and f.revenue_trend %} · {{ {'GROWTH': 'растёт', 'FLAT': 'без изменений', 'DECLINE': 'снижается'}[f.revenue_trend] }}{% endif %}</dd></div>
 <div><dt>Прибыль до % и налогов</dt><dd>{{ f.ebit|mln if f else '—' }}{% if f and f.amortization %} + аморт. {{ f.amortization|mln }}{% endif %}</dd></div>
 <div><dt>Действующий долг</dt><dd>{{ app.liabilities|sum(attribute='balance')|mln }} · {{ app.liabilities|length }} {{ plural(app.liabilities|length, 'обязательство', 'обязательства', 'обязательств') }}</dd></div>
@@ -58,6 +58,8 @@
 <div class="check bordered">{{ status_dot((tr.ok and not tr.check.response.tax_arrears) if tr and tr.ok else (false if tr else none)) }}
 <div class="stack-xs" style="gap:2px"><span class="b">«Прозрачный бизнес»</span>
 {% if tr and tr.ok %}{% set r = tr.check.response %}<span>{% if r.tax_arrears %}Недоимка {{ r.tax_arrears|money }}{% else %}Недоимки нет{% endif %} · {{ r.employees }} сотр.</span>
+{% if r.revenue_last_year is not none %}{% set f = app.financials %}<span>Выручка за прошлый год {{ r.revenue_last_year|mln }}{% if f and f.revenue %} · в анкете {{ f.revenue|mln }}{% endif %}</span>
+{% if r.expenses_last_year is not none and r.revenue_last_year %}<span>Рентабельность {{ '%.1f'|format((r.revenue_last_year - r.expenses_last_year) / r.revenue_last_year * 100)|replace('.', ',') }}%{% if f and f.revenue and f.ebit is not none %} · в анкете {{ '%.1f'|format((f.ebit + (f.amortization or 0)) / f.revenue * 100)|replace('.', ',') }}%{% endif %}</span>{% endif %}{% endif %}
 {% elif tr %}<span style="color:var(--red)">Не ответил: {{ tr.failures }} {{ plural(tr.failures, 'попытка', 'попытки', 'попыток') }}</span>{% else %}<span class="muted">Не запрашивался</span>{% endif %}
 {% if tr %}<span class="xs muted">FNS_MOCK · {{ tr.check.created_at|dshort }} · смоделировано</span>{% endif %}</div></div>
 
@@ -87,7 +89,8 @@
 {% if sc %}
 {% set z1 = cfg.zones.decline_below %}{% set z3 = 100 - cfg.zones.auto_from %}{% set z2 = 100 - z1 - z3 %}
 <div class="inline" style="gap:24px">
-<div class="inline" style="gap:6px;align-items:baseline"><span style="font-size:44px;font-weight:700;line-height:1">{{ sc.score }}</span><span class="muted">из 100</span></div>
+<div class="stack-xs" style="gap:2px"><div class="inline" style="gap:6px;align-items:baseline"><span style="font-size:44px;font-weight:700;line-height:1">{{ sc.score }}</span><span class="muted">из 100</span></div>
+<span class="small muted">вероятность дефолта за год ≈ {{ '%.1f'|format(pd_of(sc.score, cfg) * 100)|replace('.', ',') }}%</span></div>
 <div style="flex:1 1 360px;gap:6px" class="stack-xs">
 <div class="zonebar" aria-hidden="true"><span class="z1" style="width:{{ z1 }}%"></span><span class="z2" style="width:{{ z2 }}%"></span><span class="z3" style="width:{{ z3 }}%"></span></div>
 <div class="zonemark" aria-hidden="true"><span style="left:{{ sc.score }}%"></span></div>
@@ -106,7 +109,7 @@
 {% endfor %}
 {% set plus = sc.factors|selectattr('points', 'gt', 0)|sum(attribute='points') %}
 {% set minus = sc.factors|selectattr('points', 'lt', 0)|sum(attribute='points') %}
-<div class="xs muted" style="padding-top:8px;border-top:1px solid var(--line)">База {{ sc.base }} + {{ plus }} − {{ minus|abs }} = {{ sc.score }}. Долговая нагрузка = (долг + запрос) / (прибыль до % и налогов + амортизация).</div>
+<div class="xs muted" style="padding-top:8px;border-top:1px solid var(--line)">База {{ sc.base }} + {{ plus }} − {{ minus|abs }} = {{ sc.score }}. Долговая нагрузка = (долг + запрос) / (прибыль до % и налогов + амортизация). Каждые {{ (cfg.scale or {}).pdo or 10 }} баллов — шансы дефолта вдвое ниже; баллы откалиброваны на синтетическом портфеле (docs/calibration.md).</div>
 </div>
 {% else %}
 <p class="muted">Оценки нет: {% if app.flags and app.flags.source_unavailable %}источник данных не ответил, решение принимается вручную по анкете{% else %}заявка ещё не дошла до скоринга{% endif %}.</p>
@@ -121,6 +124,12 @@
 {% endfor %}
 {% elif v.decision and v.decision.source == 'SYSTEM' %}
 <div class="panel" style="padding:12px 14px">Решение системы: {{ v.label[0] }}</div>
+{% endif %}
+{% set si = sc.inputs if sc else {} %}
+{% if si.get('payment') is not none %}
+<p class="small" style="margin:0">Платёж по новому кредиту {{ si.payment|money }} в месяц{% if si.existing_payment %}, по текущим — {{ si.existing_payment|money }}{% if not si.existing_monthly %} (оценка по остатку){% endif %}{% endif %}.
+{% if si.get('lgd') is not none %}<p class="small" style="margin:0">Ставка {{ si.rate|rate }}% = базовая {{ app.product.base_rate|rate }}% + ожидаемые потери {{ '%.1f'|format(si.rate|float - app.product.base_rate|float)|replace('.', ',') }} п. п.: вероятность дефолта {{ '%.1f'|format(si.pd * 100)|replace('.', ',') }}% × потери при дефолте {{ (si.lgd * 100)|round|int }}%{% if si.collateral_cover %} — залог с дисконтом {{ si.collateral_cover|mln }} покрывает {{ [100, (si.collateral_cover / app.amount * 100)|round|int]|min }}% суммы{% else %} (без залога){% endif %}.</p>{% endif %}
+Покрытие платежей {% if si.dscr is not none %}<strong{% if si.dscr < si.min_dscr %} style="color:var(--red)"{% endif %}>{{ '%.2f'|format(si.dscr)|replace('.', ',') }}×</strong>{% else %}<strong style="color:var(--red)">нет — прибыль ≤ 0</strong>{% endif %} при норме {{ '%.2f'|format(si.min_dscr)|replace('.', ',') }}×: прибыль до % и налогов + амортизация / платежи по всем кредитам.</p>
 {% endif %}
 {% if v.hint and can_decide %}
 <div class="panel blue inline" style="padding:12px 14px;gap:8px 16px"><span style="flex:1 1 280px">Подсказка системы: {{ v.hint.text }}{% if v.hint.rate %}, ставка {{ v.hint.rate|rate }}%{% endif %}.</span>
@@ -154,6 +163,7 @@
 {% if can_decide %}
 {% set fk = form.get('kind') or kind %}
 {% set hint_amount = v.hint.amount if v.hint and kind == 'counter' else app.amount %}
+{% set hint_term = v.hint.term_months if v.hint and kind == 'counter' else app.term_months %}
 <form id="decision" method="post" action="/bank/applications/{{ app.id }}/decision" class="card focus dec" aria-labelledby="dec-h" style="gap:16px">
 <input type="hidden" name="csrf_token" value="{{ csrf }}">
 <input type="hidden" name="version" value="{{ app.version }}">
@@ -169,7 +179,7 @@
 
 <div class="g-terms grid2">
 <div class="field" style="grid-column:span 2;gap:4px"><label for="d-sum">Сумма, ₽</label><input id="d-sum" name="amount" class="txt" inputmode="numeric" data-money value="{{ (form.get('amount') or (hint_amount|money_input)) }}"></div>
-<div class="field" style="gap:4px"><label for="d-term">Срок, мес.</label><input id="d-term" name="term" class="txt" inputmode="numeric" value="{{ form.get('term') or app.term_months }}"></div>
+<div class="field" style="gap:4px"><label for="d-term">Срок, мес.</label><input id="d-term" name="term" class="txt" inputmode="numeric" value="{{ form.get('term') or hint_term }}"></div>
 <div class="field" style="gap:4px"><label for="d-rate">Ставка, %</label><input id="d-rate" name="rate" class="txt" inputmode="decimal" value="{{ form.get('rate') or (suggested_rate|rate) }}"></div>
 </div>
 

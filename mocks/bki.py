@@ -8,11 +8,14 @@ import os
 import random
 from datetime import datetime, timezone
 
+from typing import Literal
+
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
 
-from mocks.data import get_company
+from mocks.data import get_company, overrides, save_override
 
-app = FastAPI(title="BKI mock (смоделировано)", version="1.1.0")
+app = FastAPI(title="BKI mock (смоделировано)", version="1.2.0")
 FAIL_RATE = float(os.getenv("BKI_FAIL_RATE", "0"))
 
 
@@ -40,3 +43,55 @@ def report(inn: str, consent_id: str | None = Query(None), purpose: str | None =
         "inquiries_30d": len(loans) % 3,
         "_meta": {"source": "BKI_MOCK", "simulated": True, "generated_at": datetime.now(timezone.utc).isoformat()},
     }
+
+
+# --- Тестовые данные (только для демо): правка кредитной истории компании -------------------------------
+
+class Overdue(BaseModel):
+    days: int = Field(ge=1, le=3650, description="Сколько дней длилась просрочка")
+    amount: int = Field(ge=0, le=10**12, description="Сумма просрочки, ₽")
+    months_ago: int = Field(ge=0, le=23, description="Сколько месяцев назад (история — за 24 месяца)")
+
+
+class Loan(BaseModel):
+    creditor: str = Field(min_length=1, max_length=120)
+    kind: Literal["кредит", "лизинг", "овердрафт", "гарантия"] = "кредит"
+    balance: int = Field(ge=0, le=10**13)
+    monthly_payment: int = Field(default=0, ge=0, le=10**12)
+    maturity: str | None = Field(default=None, pattern=r"^(0[1-9]|1[0-2])\.\d{4}$")
+    current_overdue_days: int = Field(default=0, ge=0, le=3650, description="Действующая просрочка, дней")
+    current_overdue_amount: int = Field(default=0, ge=0, le=10**12)
+    overdues_24m: list[Overdue] = Field(default_factory=list, max_length=50)
+
+
+class ReportIn(BaseModel):
+    loans: list[Loan] = Field(max_length=30)
+
+
+def _admin_view(inn: str) -> dict:
+    company = get_company(inn)
+    if company is None:
+        raise HTTPException(status_code=404, detail="Некорректный ИНН")
+    return {"inn": inn, "loans": company["bki"], "overridden": inn in overrides("bki")}
+
+
+@app.get("/admin/reports/{inn}", tags=["тестовые данные"])
+def admin_report(inn: str) -> dict:
+    """Кредитная история компании как её отдаст /report — с учётом правок."""
+    return _admin_view(inn)
+
+
+@app.put("/admin/reports/{inn}", tags=["тестовые данные"])
+def admin_report_save(inn: str, body: ReportIn) -> dict:
+    """Заменить кредитную историю компании (СМОДЕЛИРОВАНО: настоящее БКИ так не умеет)."""
+    _admin_view(inn)
+    save_override("bki", inn, [loan.model_dump() for loan in body.loans])
+    return _admin_view(inn)
+
+
+@app.delete("/admin/reports/{inn}", tags=["тестовые данные"])
+def admin_report_reset(inn: str) -> dict:
+    """Вернуть исходную кредитную историю."""
+    _admin_view(inn)
+    save_override("bki", inn, None)
+    return _admin_view(inn)

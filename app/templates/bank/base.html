@@ -9,7 +9,8 @@
 <a href="/bank/queue?tab=all" {% if nav == 'all' %}aria-current="page"{% endif %}>Все заявки</a>
 <a href="/bank/process" {% if nav == 'process' %}aria-current="page"{% endif %}>Процесс</a>
 <a href="/bank/settings" {% if nav == 'settings' %}aria-current="page"{% endif %}>Продукты и скоринг</a>
-<a href="/api/docs">API</a>
+{% if user.role == 'ADMIN' %}<a href="/bank/sandbox" {% if nav == 'sandbox' %}aria-current="page"{% endif %}>Тестовые данные</a>{% endif %}
+<a href="/api/docs" target="_blank" rel="noopener" title="Документация JSON API (Swagger): все операции сайта для интеграций — откроется в новой вкладке">API ↗</a>
 </nav>
 <div class="user-menu">
 <div style="display:flex;flex-direction:column;text-align:right"><span class="m">{{ user.full_name }}</span><span class="xs" style="color:var(--on-navy)">{{ user.position or user.role }}</span></div>

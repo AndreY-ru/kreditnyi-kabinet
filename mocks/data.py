@@ -2,11 +2,21 @@
 
 ВСЕ КОМПАНИИ И ЛЮДИ ВЫМЫШЛЕНЫ. Совпадения с реальными организациями случайны.
 ИНН сгенерированы с корректной контрольной суммой, но не принадлежат реальным лицам.
+
+Где что лежит: исходные данные — в этом файле (COMPANIES и _generated для любого другого ИНН).
+Правки для демо (страница «Тестовые данные» у администратора банка) моки хранят отдельно — в bki.json
+и fns.json в каталоге MOCK_DATA_DIR (в Docker — том mockdata) — и накладывают поверх исходных.
+Удалить правку — значит вернуть исходные данные. Новые компании, добавленные там же, — в companies.json.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
+import json
+import os
+import secrets
 from datetime import date, timedelta
+from pathlib import Path
 
 
 def _months_ago(months: int) -> str:
@@ -27,6 +37,19 @@ def inn_is_valid(inn: str) -> bool:
         sum(a * b for a, b in zip(d, k1)) % 11 % 10 == d[10]
         and sum(a * b for a, b in zip(d, k2)) % 11 % 10 == d[11]
     )
+
+
+def new_inn(kind: str) -> str:
+    """Случайный ИНН с верной контрольной суммой: 10 цифр — организация, 12 — ИП."""
+    digits = [secrets.randbelow(10) for _ in range(9 if kind == "OOO" else 10)]
+    digits[0] = digits[0] or 7
+    if kind == "OOO":
+        k = [2, 4, 10, 3, 5, 9, 4, 6, 8]
+        digits.append(sum(a * b for a, b in zip(digits, k)) % 11 % 10)
+    else:
+        for k in ([7, 2, 4, 10, 3, 5, 9, 4, 6, 8], [3, 7, 2, 4, 10, 3, 5, 9, 4, 6, 8]):
+            digits.append(sum(a * b for a, b in zip(digits, k)) % 11 % 10)
+    return "".join(map(str, digits))
 
 
 # ИНН, на котором мок ФНС всегда отвечает 503 (сценарий T8)
@@ -212,7 +235,57 @@ def _generated(inn: str) -> dict:
     }
 
 
-def get_company(inn: str) -> dict | None:
+def data_dir() -> Path:
+    return Path(os.getenv("MOCK_DATA_DIR", "data/mocks"))
+
+
+def overrides(name: str) -> dict:
+    """Правки тестовых данных: name — bki или fns. Нет файла — правок нет."""
+    try:
+        return json.loads((data_dir() / f"{name}.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+
+
+def save_override(name: str, inn: str | None, value: dict | list | None) -> None:
+    """Записать правку для ИНН (value=None — удалить, inn=None — удалить все). Запись атомарная."""
+    folder = data_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    data = {} if inn is None else overrides(name)
+    if inn is not None:
+        if value is None:
+            data.pop(inn, None)
+        else:
+            data[inn] = value
+    tmp = folder / f".{name}.json.tmp"
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(folder / f"{name}.json")
+
+
+def default_company(inn: str) -> dict | None:
+    """Исходные данные без правок (копия — чтобы ответы не меняли справочник)."""
     if not inn_is_valid(inn):
         return None
-    return COMPANIES.get(inn) or _generated(inn)
+    return copy.deepcopy(overrides("companies").get(inn) or COMPANIES.get(inn) or _generated(inn))
+
+
+def known_companies() -> list[dict]:
+    """Компании справочника и добавленные для демо (у любого другого верного ИНН — сгенерированная)."""
+    custom = overrides("companies")
+    rows = [{"inn": inn, "name": c["egrul"]["name"], "custom": False} for inn, c in COMPANIES.items()]
+    rows += [{"inn": inn, "name": c["egrul"]["name"], "custom": True} for inn, c in custom.items()]
+    return rows
+
+
+def get_company(inn: str) -> dict | None:
+    company = default_company(inn)
+    if company is None:
+        return None
+    fns = overrides("fns").get(inn)
+    if fns:
+        company["egrul"].update(fns.get("egrul", {}))
+        company["transparent"].update(fns.get("transparent", {}))
+    bki = overrides("bki").get(inn)
+    if bki is not None:
+        company["bki"] = bki
+    return company

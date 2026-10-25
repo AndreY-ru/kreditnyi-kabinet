@@ -20,6 +20,7 @@ from app.domain.transitions import DomainError
 from app.security import LoginRequired
 from app.templating import templates
 from app.web.bank import router as bank_router
+from app.web.sandbox import router as sandbox_router
 from app.web.client import router as client_router
 from app.web.common import router as common_router
 
@@ -52,7 +53,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Умный кредитный кабинет предпринимателя",
-        version="1.1.0",
+        version="1.2.0",
         description="MVP для хакатона «Альфа Будущее». Все данные синтетические, ФНС и БКИ смоделированы.",
         docs_url="/api/docs",
         redoc_url=None,
@@ -87,6 +88,7 @@ def create_app() -> FastAPI:
     app.include_router(common_router)
     app.include_router(client_router)
     app.include_router(bank_router)
+    app.include_router(sandbox_router)
 
     @app.exception_handler(LoginRequired)
     async def _login(request: Request, exc: LoginRequired):

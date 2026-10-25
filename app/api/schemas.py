@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.services.applications import MAX_MONEY
+from app.services.companies import POSITIONS
 
 Goal = Literal["working", "equipment", "cash_gap", "new_direction", "refinance"]
 Trend = Literal["GROWTH", "FLAT", "DECLINE"]
@@ -59,6 +62,7 @@ class ProductOut(ORM):
     auto_limit: int
     decision_days: int
     gov_support: bool
+    active: bool = True
     version: int
 
 
@@ -94,9 +98,14 @@ class CompanyOut(ORM):
     employees: int | None
 
 
+Position = Literal[POSITIONS]  # type: ignore[valid-type]
+CollateralKind = Literal["REAL_ESTATE", "VEHICLE", "EQUIPMENT", "GOODS", "DEPOSIT"]
+Money = Annotated[int, Field(ge=0, le=MAX_MONEY)]
+
+
 class CompanyIn(BaseModel):
     inn: str = Field(pattern=r"^\d{10}(\d{2})?$")
-    position: str = "Представитель"
+    position: Position = "Генеральный директор"
 
 
 class SelfCheckItem(BaseModel):
@@ -114,9 +123,14 @@ class PrecheckIn(BaseModel):
     revenue: int | None = Field(default=None, ge=0, description="Не указано — подставим из прошлой заявки или ФНС")
     profit: int | None = Field(default=None, description="Прибыль до процентов и налогов, примерно")
     debt: int | None = Field(default=None, ge=0, description="Остаток по действующим кредитам и лизингу")
+    monthly_payment: int | None = Field(default=None, ge=0, description="Платёж по действующим кредитам в месяц. "
+                                        "Не указан — из прошлой заявки или оценка по остатку")
     revenue_trend: Trend | None = None
-    overdues: Literal["none", "minor", "current"] = Field(
-        default="none", description="Просрочки за 2 года со слов клиента; в БКИ до согласия не ходим")
+    overdues: Literal["none", "minor", "major", "current"] = Field(
+        default="none", description="Просрочки за 2 года со слов клиента: minor — до 30 дней, major — больше; "
+                                    "в БКИ до согласия не ходим")
+    collateral_kind: CollateralKind | None = None
+    collateral_value: int | None = Field(default=None, ge=0, le=MAX_MONEY, description="Рыночная стоимость залога")
 
 
 class PrecheckFactor(BaseModel):
@@ -149,6 +163,7 @@ class IntakeOut(BaseModel):
     amount: int | None
     term_months: int | None
     has_collateral: bool | None
+    collateral_kind: CollateralKind | None = Field(default=None, description="Что в залоге — по словам рядом с «залог»")
     has_guarantor: bool | None
     source: Literal["llm", "rules"] = Field(description="llm — модель (числа сверены с текстом), rules — правила")
     missing: list[str]
@@ -168,7 +183,7 @@ class ClientMessageOut(BaseModel):
 
 class MemberIn(BaseModel):
     email: str
-    position: str = "Сотрудник"
+    position: Position = "Бухгалтер"
     can_apply: bool = True
     can_sign: bool = False
 
@@ -197,24 +212,26 @@ class ApplicationPatch(BaseModel):
     term_months: int | None = Field(default=None, gt=0, le=120)
     goal: Goal | None = None
     has_collateral: bool | None = None
-    collateral_desc: str | None = None
+    collateral_desc: str | None = Field(default=None, max_length=500)
+    collateral_kind: CollateralKind | None = None
+    collateral_value: int | None = Field(default=None, ge=0, le=MAX_MONEY, description="Рыночная стоимость, ₽")
     has_guarantor: bool | None = None
 
 
 class LiabilityIn(BaseModel):
-    creditor: str = Field(min_length=1, max_length=255)
-    balance: int = Field(ge=0)
-    monthly_payment: int = Field(default=0, ge=0)
-    maturity: str | None = None
+    creditor: str = Field(min_length=1, max_length=120)
+    balance: int = Field(ge=0, le=MAX_MONEY)
+    monthly_payment: int = Field(default=0, ge=0, le=MAX_MONEY)
+    maturity: str | None = Field(default=None, pattern=r"^(0[1-9]|1[0-2])\.\d{4}$", description="ММ.ГГГГ")
 
 
 class FinancialsIn(BaseModel):
-    revenue: int | None = Field(default=None, ge=0)
-    expenses: int | None = Field(default=None, ge=0)
-    ebit: int | None = None
-    amortization: int | None = Field(default=None, ge=0)
+    revenue: Money | None = None
+    expenses: Money | None = None
+    ebit: int | None = Field(default=None, ge=-MAX_MONEY, le=MAX_MONEY)
+    amortization: Money | None = None
     revenue_trend: Trend | None = None
-    employees: int | None = Field(default=None, ge=0)
+    employees: int | None = Field(default=None, ge=0, le=1_000_000)
     liabilities: list[LiabilityIn] | None = None
 
 
@@ -275,6 +292,8 @@ class ApplicationOut(ORM):
     term_months: int
     goal: str
     has_collateral: bool
+    collateral_kind: str | None = None
+    collateral_value: int | None = None
     has_guarantor: bool
     snapshot_version: int
     created_at: datetime
@@ -329,7 +348,34 @@ class ScoringModelIn(BaseModel):
 
 
 class ProductPatch(BaseModel):
+    """Поля, которые нужно поменять; остальные остаются как есть. Код продукта не меняется."""
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    kind: Literal["LOAN", "CREDIT_LINE", "OVERDRAFT"] | None = None
+    description: str | None = Field(default=None, max_length=1000)
+    goals: list[Goal] | None = Field(default=None, min_length=1)
+    min_amount: int | None = Field(default=None, ge=10_000, le=10**12)
+    max_amount: int | None = Field(default=None, ge=10_000, le=10**12)
+    min_term: int | None = Field(default=None, ge=1, le=120)
+    max_term: int | None = Field(default=None, ge=1, le=120)
+    min_business_months: int | None = Field(default=None, ge=0, le=240)
+    requires_collateral: bool | None = None
+    unsecured_max: int | None = Field(default=None, ge=0, le=10**12)
+    requires_guarantor: bool | None = None
     base_rate: Decimal | None = Field(default=None, gt=0, lt=100)
-    auto_limit: int | None = Field(default=None, ge=0)
+    auto_limit: int | None = Field(default=None, ge=0, le=10**12)
+    decision_days: int | None = Field(default=None, ge=1, le=60)
+    gov_support: bool | None = None
     active: bool | None = None
+
+
+class ProductIn(ProductPatch):
+    code: str = Field(pattern=r"^[A-Z][A-Z0-9_]{1,39}$", description="Латиница, цифры и _, например SEASON_LOAN")
+    name: str = Field(min_length=2, max_length=120)
+    kind: Literal["LOAN", "CREDIT_LINE", "OVERDRAFT"]
+    goals: list[Goal] = Field(min_length=1)
+    min_amount: int = Field(ge=10_000, le=10**12)
+    max_amount: int = Field(ge=10_000, le=10**12)
+    min_term: int = Field(ge=1, le=120)
+    max_term: int = Field(ge=1, le=120)
+    base_rate: Decimal = Field(gt=0, lt=100)
 

@@ -18,6 +18,7 @@ x-app-env: &app-env
 
 services:
   db:
+    restart: unless-stopped  # после перезагрузки машины стек поднимается сам
     image: postgres:16.4-alpine
     environment:
       POSTGRES_DB: kabinet
@@ -32,24 +33,31 @@ services:
       retries: 20
 
   fns-mock:
+    restart: unless-stopped
     build: { context: ., dockerfile: mocks/Dockerfile }
-    image: kreditnyi-kabinet-mocks:1.1.0
+    image: kreditnyi-kabinet-mocks:1.2.0
     environment:
       PORT: "8101"
       FNS_FAIL_RATE: ${FNS_FAIL_RATE:-0}
+    volumes:
+      - mockdata:/data
     command: ["sh", "-c", "uvicorn mocks.fns:app --host 0.0.0.0 --port 8101"]
 
   bki-mock:
+    restart: unless-stopped
     build: { context: ., dockerfile: mocks/Dockerfile }
-    image: kreditnyi-kabinet-mocks:1.1.0
+    image: kreditnyi-kabinet-mocks:1.2.0
     environment:
       PORT: "8102"
       BKI_FAIL_RATE: ${BKI_FAIL_RATE:-0}
+    volumes:
+      - mockdata:/data
     command: ["sh", "-c", "uvicorn mocks.bki:app --host 0.0.0.0 --port 8102"]
 
   app:
+    restart: unless-stopped
     build: .
-    image: kreditnyi-kabinet-app:1.1.0
+    image: kreditnyi-kabinet-app:1.2.0
     environment: *app-env
     ports:
       - "8000:8000"
@@ -61,8 +69,9 @@ services:
       bki-mock: { condition: service_healthy }
 
   worker:
+    restart: unless-stopped
     build: .
-    image: kreditnyi-kabinet-app:1.1.0
+    image: kreditnyi-kabinet-app:1.2.0
     environment: *app-env
     command: ["python", "-m", "app.worker"]
     healthcheck:
@@ -73,6 +82,7 @@ services:
       app: { condition: service_healthy }  # миграции и сиды выполняет app
 
   ollama:
+    restart: unless-stopped
     profiles: ["llm"]
     image: ollama/ollama:0.40.11
     environment:
@@ -84,5 +94,6 @@ services:
 
 volumes:
   pgdata:
+  mockdata:  # правки тестовых данных ФНС и БКИ (bki.json, fns.json)
   uploads:
   ollama:

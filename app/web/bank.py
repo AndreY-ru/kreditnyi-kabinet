@@ -8,13 +8,14 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.domain.states import S
-from app.domain.transitions import DomainError
+from app.domain.transitions import DomainError, NotFound
 from app.models import AuditLog, InfoRequest, Product, ScoringModel, User
 from app.security import admin_user, bank_user, verify_csrf
 from app.services import analyst as an
 from app.services import applications as svc
 from app.services import client_message
-from app.services.credit_logic import rate_for
+from app.services import products as products_svc
+from app.services.credit_logic import activate_model, credit_cfg, rate_for
 from app.services.explain import REASONS
 from app.services.pipeline import active_model
 from app.services.views import application_view, checks_summary
@@ -43,7 +44,7 @@ def card(request: Request, app_id: int, d: str = "", db: Session = Depends(get_d
     hint = v["hint"]
     default_kind = d or ("counter" if hint and hint.get("amount", app.amount) < app.amount else "approve")
     sc = v["score"]
-    suggested_rate = rate_for(app.product, sc.score, cfg) if sc else app.product.base_rate
+    suggested_rate = rate_for(app.product, sc.score, cfg, (sc.inputs or {}).get("lgd")) if sc else app.product.base_rate
     answered = db.scalar(select(InfoRequest).where(InfoRequest.application_id == app.id,
                                                    InfoRequest.status == "ANSWERED").order_by(InfoRequest.id.desc()))
     return page(request, "bank/card.html", {
@@ -98,7 +99,8 @@ async def decision(request: Request, app_id: int, db: Session = Depends(get_db),
         return page(request, "bank/card.html", {
             "user": user, "nav": "queue", "v": v, "app": app, "checks": checks_summary(v["checks"]), "cfg": cfg,
             "kind": kind, "kinds": an.DECISION_KINDS, "reasons": REASONS, "doc_kinds": an.DOC_KINDS,
-            "suggested_rate": rate_for(app.product, sc.score, cfg) if sc else app.product.base_rate,
+            "suggested_rate": rate_for(app.product, sc.score, cfg, (sc.inputs or {}).get("lgd")) if sc
+            else app.product.base_rate,
             "answered": None, "form": dict(form) | {"reasons": form.getlist("reasons")}, "error": e.message,
             "conflict": e.code == "version_conflict", "can_decide": app.status == S.MANUAL_REVIEW,
         }, status_code=e.status_code)
@@ -126,26 +128,94 @@ def process(request: Request, db: Session = Depends(get_db), user: User = Depend
 def settings_page(request: Request, db: Session = Depends(get_db), user: User = Depends(bank_user)):
     products = db.scalars(select(Product).order_by(Product.id)).all()
     models = db.scalars(select(ScoringModel).order_by(ScoringModel.id.desc())).all()
+    cfg = active_model(db)
+    journal = db.scalars(select(AuditLog).where(AuditLog.action.like("product.%") | AuditLog.action.like("sandbox.%")
+                                                | AuditLog.action.like("scoring.%"))
+                         .order_by(AuditLog.id.desc()).limit(30)).all()
+    names = {u.id: u.full_name for u in db.scalars(select(User).where(User.id.in_({j.actor_id for j in journal})))}
     return page(request, "bank/settings.html", {"user": user, "nav": "settings", "products": products,
-                                                "models": models, "cfg": active_model(db)})
+                                                "models": models, "cfg": cfg, "credit": credit_cfg(cfg),
+                                                "journal": journal, "names": names, "kinds": products_svc.KINDS})
+
+
+@router.post("/settings/models/{version}/activate")
+def model_activate(request: Request, version: str, db: Session = Depends(get_db), user: User = Depends(admin_user)):
+    try:
+        activate_model(db, user, version)
+    except DomainError as e:
+        db.rollback()
+        flash(request, e.message, "err")
+        return RedirectResponse("/bank/settings", 303)
+    db.commit()
+    flash(request, f"Активна версия карты {version}: по ней посчитаются новые заявки")
+    return RedirectResponse("/bank/settings", 303)
+
+
+_BLANK_PRODUCT = {"code": "", "name": "", "kind": "LOAN", "description": "", "goals": ["working"],
+                  "min_amount": 500_000, "max_amount": 5_000_000, "min_term": 6, "max_term": 36,
+                  "min_business_months": 12, "requires_collateral": False, "unsecured_max": None,
+                  "requires_guarantor": True, "base_rate": "19,00", "auto_limit": 1_000_000, "decision_days": 3,
+                  "gov_support": False, "active": True}
+
+
+def _product_form(form) -> dict:
+    data = {k: form.get(k) for k in ("code", "name", "kind", "description", "min_amount", "max_amount", "min_term",
+                                     "max_term", "min_business_months", "unsecured_max", "base_rate", "auto_limit",
+                                     "decision_days")}
+    data["goals"] = form.getlist("goals")
+    for k in ("requires_collateral", "requires_guarantor", "gov_support", "active"):
+        data[k] = form.get(k)
+    return data
+
+
+def _product_page(request: Request, user: User, p: dict, product: Product | None, errors: dict | None = None,
+                  status_code: int = 200) -> HTMLResponse:
+    return page(request, "bank/product.html", {"user": user, "nav": "settings", "p": p, "product": product,
+                                               "errors": errors or {}, "kinds": products_svc.KINDS},
+                status_code=status_code)
+
+
+@router.get("/settings/products/new", response_class=HTMLResponse)
+def product_new(request: Request, user: User = Depends(admin_user)):
+    return _product_page(request, user, dict(_BLANK_PRODUCT), None)
+
+
+@router.post("/settings/products/new")
+async def product_create(request: Request, db: Session = Depends(get_db), user: User = Depends(admin_user)):
+    data = _product_form(await request.form())
+    try:
+        p = products_svc.save_product(db, user, data)
+    except DomainError as e:
+        db.rollback()
+        return _product_page(request, user, {**data, "active": bool(data["active"])}, None, e.details or {}, 422)
+    db.commit()
+    flash(request, f"Продукт «{p.name}» добавлен — он уже в подборе и проверке шансов" if p.active
+          else f"Продукт «{p.name}» добавлен в архив")
+    return RedirectResponse("/bank/settings", 303)
+
+
+@router.get("/settings/products/{product_id}", response_class=HTMLResponse)
+def product_edit(request: Request, product_id: int, db: Session = Depends(get_db), user: User = Depends(admin_user)):
+    product = db.get(Product, product_id)
+    if product is None:
+        raise NotFound("Продукт не найден")
+    return _product_page(request, user, products_svc.as_dict(product), product)
 
 
 @router.post("/settings/products/{product_id}")
-def settings_product(request: Request, product_id: int, base_rate: str = Form(...), auto_limit: str = Form(...),
-                     active: str | None = Form(None), db: Session = Depends(get_db), user: User = Depends(admin_user)):
-    p = db.get(Product, product_id)
-    if p is None:
-        raise DomainError("Продукт не найден")
+async def product_save(request: Request, product_id: int, db: Session = Depends(get_db),
+                       user: User = Depends(admin_user)):
+    product = db.get(Product, product_id)
+    if product is None:
+        raise NotFound("Продукт не найден")
+    data = _product_form(await request.form())
     try:
-        p.base_rate = an._parse_rate(base_rate)
+        before = product.version
+        products_svc.save_product(db, user, data, product)
     except DomainError as e:
-        flash(request, e.message, "err")
-        return RedirectResponse("/bank/settings", 303)
-    p.auto_limit = parse_money(auto_limit) or 0
-    p.active = bool(active)
-    p.version += 1
-    db.add(AuditLog(actor_id=user.id, action="product.update", entity="product", entity_id=p.id,
-                    data={"base_rate": str(p.base_rate), "auto_limit": p.auto_limit, "active": p.active}))
+        db.rollback()
+        return _product_page(request, user, {**data, "code": product.code}, product, e.details or {}, 422)
     db.commit()
-    flash(request, f"«{p.name}» обновлён, версия {p.version}")
+    flash(request, f"«{product.name}» сохранён, версия {product.version}" if product.version != before
+          else "Изменений нет")
     return RedirectResponse("/bank/settings", 303)

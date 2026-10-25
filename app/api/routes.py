@@ -12,7 +12,10 @@ from app.security import TooManyAttempts, admin_user, authenticate, bank_user, c
 from app.services import analyst as analyst_svc
 from app.services import applications as svc
 from app.services import accounts, client_message, intake, precheck
+from app.services import products as products_svc
 from app.services.catalog import match_products
+from app.services.credit_logic import activate_model
+from app.services.credit_logic import config_problem as scoring_config_problem
 from app.services.companies import (
     add_company_by_inn,
     invite_member,
@@ -35,6 +38,7 @@ def app_out(db: Session, app: Application) -> s.ApplicationOut:
         id=app.id, number=app.number, status=app.status, status_label=label(app.status)[0], version=app.version,
         company_id=app.company_id, product_id=app.product_id, product_name=app.product.name, amount=app.amount,
         term_months=app.term_months, goal=app.goal, has_collateral=app.has_collateral, has_guarantor=app.has_guarantor,
+        collateral_kind=app.collateral_kind, collateral_value=app.collateral_value,
         snapshot_version=app.snapshot_version, created_at=app.created_at, submitted_at=app.submitted_at,
         validation_errors=app.validation_errors,
         offer=s.OfferOut.model_validate(offer) if offer else None,
@@ -109,7 +113,7 @@ def podbor_parse(body: s.IntakeIn, user: User = Depends(current_user)):
     только из текста; без модели — правила. Дальше — обычный /products/match."""
     r = intake.parse(body.text)
     return s.IntakeOut(goal=r.goal, amount=r.amount, term_months=r.term, has_collateral=r.collateral,
-                       has_guarantor=r.guarantor, source=r.source, missing=r.missing, summary=r.summary())
+                       collateral_kind=r.collateral_kind, has_guarantor=r.guarantor, source=r.source, missing=r.missing, summary=r.summary())
 
 
 @router.get("/companies", response_model=list[s.CompanyOut], tags=["companies"])
@@ -142,7 +146,8 @@ def company_precheck(company_id: int, body: s.PrecheckIn, db: Session = Depends(
         has_guarantor=body.has_guarantor, revenue=body.revenue if body.revenue is not None else d["revenue"],
         profit=body.profit if body.profit is not None else d["profit"],
         debt=body.debt if body.debt is not None else d["debt"], trend=body.revenue_trend or d["trend"],
-        overdues=body.overdues)
+        monthly=body.monthly_payment if body.monthly_payment is not None or body.debt is not None else d["monthly"],
+        overdues=body.overdues, collateral_kind=body.collateral_kind, collateral_value=body.collateral_value)
     r = precheck.run(db, company, p)
     if not r["ready"]:
         raise HTTPException(422, "Нужны сумма, выручка и прибыль")
@@ -386,24 +391,42 @@ def new_scoring_model(body: s.ScoringModelIn, db: Session = Depends(get_db), use
         raise HTTPException(409, "Такая версия уже есть")
     for r in db.scalars(select(ScoringModel).where(ScoringModel.active.is_(True))):
         r.active = False
-    db.add(ScoringModel(version=body.version, config={**body.config, "version": body.version}, active=True,
-                        created_by=user.id))
+    config = {**body.config, "version": body.version}
+    problem = scoring_config_problem(config)
+    if problem:
+        raise HTTPException(422, f"Конфигурация не работает: {problem}")
+    db.add(ScoringModel(version=body.version, config=config, active=True))
     db.add(AuditLog(actor_id=user.id, action="scoring.new_version", entity="scoring_model", data={"v": body.version}))
     db.commit()
     return {"version": body.version, "active": True}
 
 
+@router.post("/admin/scoring-models/{version}/activate", tags=["admin"])
+def activate_scoring_model(version: str, db: Session = Depends(get_db), user: User = Depends(admin_user)):
+    """Включить другую версию карты — например, откатиться. Новые заявки посчитаются по ней."""
+    activate_model(db, user, version)
+    db.commit()
+    return {"version": version, "active": True}
+
+
+@router.post("/admin/products", response_model=s.ProductOut, status_code=201, tags=["admin"])
+def create_product(body: s.ProductIn, db: Session = Depends(get_db), user: User = Depends(admin_user)):
+    """Новый продукт: сразу появляется в подборе и проверке шансов (если active)."""
+    data = {"active": True, "min_business_months": 0, "decision_days": 3, "auto_limit": 0,
+            **body.model_dump(exclude_none=True)}
+    p = products_svc.save_product(db, user, data)
+    db.commit()
+    return p
+
+
 @router.patch("/admin/products/{product_id}", response_model=s.ProductOut, tags=["admin"])
 def patch_product(product_id: int, body: s.ProductPatch, db: Session = Depends(get_db),
                   user: User = Depends(admin_user)):
+    """Поменять поля продукта; версия растёт, изменения — в журнале. Архив — active=false."""
     p = db.get(Product, product_id)
     if p is None:
         raise HTTPException(404, "Продукт не найден")
-    for k, v in body.model_dump(exclude_unset=True).items():
-        setattr(p, k, v)
-    p.version += 1
-    db.add(AuditLog(actor_id=user.id, action="product.update", entity="product", entity_id=p.id,
-                    data={k: str(v) for k, v in body.model_dump(exclude_unset=True).items()}))
+    products_svc.save_product(db, user, {**products_svc.as_dict(p), **body.model_dump(exclude_unset=True)}, p)
     db.commit()
     return p
 

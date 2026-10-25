@@ -1,0 +1,72 @@
+{% extends "bank/base.html" %}
+{% block title %}{% if product %}{{ product.name }}{% else %}Новый продукт{% endif %} · Кредитный конвейер{% endblock %}
+{% macro err(name) %}{% if errors.get(name) %}<span class="err" id="{{ name }}-err">{{ errors[name] }}</span>{% endif %}{% endmacro %}
+{% macro inv(name) %}{% if errors.get(name) %}aria-invalid="true" aria-describedby="{{ name }}-err"{% endif %}{% endmacro %}
+{% block main %}
+<div class="stack-xs">
+<a href="/bank/settings" style="font-size:14px;text-decoration:none">← Продукты и скоринг</a>
+<div class="between end"><h1 class="h1">{% if product %}{{ product.name }}{% else %}Новый продукт{% endif %}</h1>
+{% if product %}<span class="small muted">{{ product.code }} · версия {{ product.version }}</span>{% endif %}</div>
+</div>
+{% if errors %}<div class="flash err" role="alert">Проверьте поля, отмеченные ниже: {{ errors|length }} {{ plural(errors|length, 'ошибка', 'ошибки', 'ошибок') }}.</div>{% endif %}
+
+<form method="post" action="{% if product %}/bank/settings/products/{{ product.id }}{% else %}/bank/settings/products/new{% endif %}" class="stack" style="gap:20px;max-width:960px">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+
+<section class="card" aria-labelledby="pf-main" style="gap:16px">
+<h2 id="pf-main" class="h3">Что это за продукт</h2>
+<div class="grid3" style="gap:14px 18px">
+<div class="field" style="grid-column:span 2"><label for="pn">Название для клиента</label><input class="txt" id="pn" name="name" maxlength="120" required value="{{ p.name }}" {{ inv('name') }}>{{ err('name') }}</div>
+<div class="field"><label for="pc">Код</label>
+{% if product %}<input class="txt" id="pc" value="{{ p.code }}" disabled><span class="hint">Код не меняется: по нему снимки заявок ссылаются на продукт</span>
+{% else %}<input class="txt" id="pc" name="code" maxlength="40" required value="{{ p.code }}" placeholder="SEASON_LOAN" style="text-transform:uppercase" {{ inv('code') }}>{{ err('code') }}{% endif %}</div>
+<div class="field"><label for="pk">Вид</label><select class="sel" id="pk" name="kind" {{ inv('kind') }}>{% for code, name in kinds.items() %}<option value="{{ code }}" {% if p.kind == code %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>{{ err('kind') }}</div>
+<div class="field" style="grid-column:span 2"><label for="pd">Описание в подборе</label><input class="txt" id="pd" name="description" maxlength="1000" value="{{ p.description }}" placeholder="Одной фразой: для чего и чем удобен" {{ inv('description') }}>{{ err('description') }}</div>
+</div>
+<fieldset class="stack-xs" style="gap:8px">
+<legend class="lbl" style="margin-bottom:8px">Для каких целей подходит</legend>
+<div class="seg sm">{% for code, name in GOALS.items() %}<input type="checkbox" id="pg-{{ code }}" name="goals" value="{{ code }}" {% if code in (p.goals or []) %}checked{% endif %}><label for="pg-{{ code }}">{{ name }}</label>{% endfor %}</div>
+{{ err('goals') }}
+</fieldset>
+<label class="cb"><input type="checkbox" name="gov_support" value="1" {% if p.gov_support %}checked{% endif %}><span class="stack-xs" style="gap:0"><span class="m">Господдержка</span><span class="small muted">Всегда рассматривает специалист, в подборе — «Льготная ставка по госпрограмме»</span></span></label>
+</section>
+
+<section class="card" aria-labelledby="pf-lim" style="gap:16px">
+<h2 id="pf-lim" class="h3">Лимиты</h2>
+<div class="grid3" style="gap:14px 18px">
+<div class="field"><label for="pa1">Сумма от, ₽</label><input class="txt" id="pa1" name="min_amount" inputmode="numeric" data-money value="{{ p.min_amount|money_input }}" {{ inv('min_amount') }}>{{ err('min_amount') }}</div>
+<div class="field"><label for="pa2">Сумма до, ₽</label><input class="txt" id="pa2" name="max_amount" inputmode="numeric" data-money value="{{ p.max_amount|money_input }}" {{ inv('max_amount') }}>{{ err('max_amount') }}</div>
+<div class="field"><label for="pbm">Бизнес работает не меньше, мес.</label><input class="txt" id="pbm" name="min_business_months" inputmode="numeric" value="{{ p.min_business_months if p.min_business_months is not none else '' }}" {{ inv('min_business_months') }}>{{ err('min_business_months') }}</div>
+<div class="field"><label for="pt1">Срок от, мес.</label><input class="txt" id="pt1" name="min_term" inputmode="numeric" value="{{ p.min_term if p.min_term is not none else '' }}" {{ inv('min_term') }}>{{ err('min_term') }}</div>
+<div class="field"><label for="pt2">Срок до, мес.</label><input class="txt" id="pt2" name="max_term" inputmode="numeric" value="{{ p.max_term if p.max_term is not none else '' }}" {{ inv('max_term') }}>{{ err('max_term') }}</div>
+<div class="field"><label for="pdd">Решение за, дней</label><input class="txt" id="pdd" name="decision_days" inputmode="numeric" value="{{ p.decision_days if p.decision_days is not none else '' }}" {{ inv('decision_days') }}>{{ err('decision_days') }}</div>
+</div>
+</section>
+
+<section class="card" aria-labelledby="pf-sec" style="gap:16px">
+<h2 id="pf-sec" class="h3">Обеспечение</h2>
+<div class="stack-sm" style="gap:12px">
+<label class="cb"><input type="checkbox" name="requires_collateral" value="1" {% if p.requires_collateral %}checked{% endif %}><span class="m">Залог обязателен</span></label>
+<label class="cb"><input type="checkbox" name="requires_guarantor" value="1" {% if p.requires_guarantor %}checked{% endif %}><span class="stack-xs" style="gap:0"><span class="m">Нужно поручительство собственника</span><span class="small muted">Для ООО; у ИП собственник и так отвечает своим имуществом</span></span></label>
+</div>
+<div class="field" style="max-width:320px"><label for="pu">Без залога — не больше, ₽</label><input class="txt" id="pu" name="unsecured_max" inputmode="numeric" data-money value="{{ p.unsecured_max|money_input if p.unsecured_max else '' }}" placeholder="без ограничения" {{ inv('unsecured_max') }}>
+{% if errors.get('unsecured_max') %}{{ err('unsecured_max') }}{% else %}<span class="hint">Сверх этой суммы — только под залог с дисконтом. Пусто — без такого лимита</span>{% endif %}</div>
+</section>
+
+<section class="card" aria-labelledby="pf-price" style="gap:16px">
+<h2 id="pf-price" class="h3">Цена и автоматика</h2>
+<div class="grid3" style="gap:14px 18px">
+<div class="field"><label for="pr">Базовая ставка, %</label><input class="txt" id="pr" name="base_rate" inputmode="decimal" value="{{ p.base_rate|rate if p.base_rate is not string else p.base_rate }}" {{ inv('base_rate') }}>
+{% if errors.get('base_rate') %}{{ err('base_rate') }}{% else %}<span class="hint">К ней прибавятся ожидаемые потери PD × LGD</span>{% endif %}</div>
+<div class="field"><label for="pl">Авто-лимит, ₽</label><input class="txt" id="pl" name="auto_limit" inputmode="numeric" data-money value="{{ p.auto_limit|money_input }}" {{ inv('auto_limit') }}>
+{% if errors.get('auto_limit') %}{{ err('auto_limit') }}{% else %}<span class="hint">До этой суммы система одобряет сама. 0 — всегда специалист</span>{% endif %}</div>
+</div>
+<label class="cb"><input type="checkbox" name="active" value="1" {% if p.active %}checked{% endif %}><span class="stack-xs" style="gap:0"><span class="m">Продукт выдаётся</span><span class="small muted">Снимите галочку, чтобы убрать в архив: пропадёт из подбора и проверки шансов, на нём нельзя будет создать заявку. Отправленные заявки не затронет</span></span></label>
+</section>
+
+<div class="inline" style="gap:8px">
+<button class="btn primary lg" type="submit">{% if product %}Сохранить — будет версия {{ product.version + 1 }}{% else %}Добавить продукт{% endif %}</button>
+<a href="/bank/settings" class="btn lg">Отмена</a>
+</div>
+</form>
+{% endblock %}

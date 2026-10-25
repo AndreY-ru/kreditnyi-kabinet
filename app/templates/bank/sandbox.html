@@ -1,0 +1,144 @@
+{% extends "bank/base.html" %}
+{% block title %}Тестовые данные · Кредитный конвейер{% endblock %}
+{% block main %}
+<div class="between end"><h1 class="h1">Тестовые данные источников</h1><span class="pill sm amber">Только для демо · смоделировано</span></div>
+
+<section class="panel blue stack-xs" style="gap:6px">
+<span class="m">Что это и где хранится</span>
+<span class="small">ФНС и бюро кредитных историй в проекте смоделированы. Исходные данные демо-компаний лежат в коде заглушек (<code>mocks/data.py</code>), а правки с этой страницы заглушки хранят у себя — в файлах <code>bki.json</code> и <code>fns.json</code> на томе <code>mockdata</code>. Настоящие БКИ и ФНС банк править не может: это пульт демо-стенда.</span>
+<span class="small">Правка действует на будущие запросы: новая заявка компании получит новый отчёт БКИ, «Проверка шансов» — новые сведения ФНС. Уже рассмотренные заявки хранят ответ, полученный при проверке, — он виден в карточке заявки, блок «Проверки и источники».</span>
+</section>
+
+{% if errors %}<div class="flash err" role="alert"><strong>Не сохранено:</strong> {{ errors|join('; ') }}</div>{% endif %}
+
+<div class="between" style="gap:12px 16px;align-items:flex-start">
+<form method="get" action="/bank/sandbox" class="inline" style="gap:8px 12px;flex:1 1 520px">
+<label for="co" class="m">Компания</label>
+<select id="co" name="inn" class="sel" data-autosubmit style="min-width:0;flex:1 1 360px;max-width:560px">{% for c in companies %}<option value="{{ c.inn }}" {% if current and c.inn == current.inn %}selected{% endif %}>{{ c.name }} · ИНН {{ c.inn }}{% if not c.connected %} · не подключена{% endif %}{% if c.custom %} · добавлена вами{% endif %}</option>{% endfor %}</select>
+<noscript><button class="btn" type="submit">Открыть</button></noscript>
+</form>
+<details class="newco"{% if errors and new_company.get('name') is not none %} open{% endif %}>
+<summary class="btn">+ Новая компания</summary>
+<form method="post" action="/bank/sandbox/companies" class="card stack-sm newco-form" style="gap:12px">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<span class="small muted">Синтетическая компания появится в ЕГРЮЛ, «Прозрачном бизнесе» и БКИ (без кредитов). Подключить её к кабинету сможет клиент по ИНН.</span>
+<div class="seg sm"><input type="radio" id="nk-o" name="kind" value="OOO" {% if new_company.get('kind', 'OOO') != 'IP' %}checked{% endif %}><label for="nk-o">ООО</label><input type="radio" id="nk-i" name="kind" value="IP" {% if new_company.get('kind') == 'IP' %}checked{% endif %}><label for="nk-i">ИП</label></div>
+<div class="grid2" style="gap:10px 14px">
+<div class="field" style="grid-column:1 / -1"><label for="nn" class="small">Название</label><input class="txt sm" id="nn" name="name" maxlength="180" required value="{{ new_company.get('name', '') }}" placeholder="Ромашка — «ООО» добавим сами"></div>
+<div class="field"><label for="ni" class="small">ИНН</label><input class="txt sm" id="ni" name="inn" inputmode="numeric" maxlength="12" value="{{ new_company.get('inn', '') }}" placeholder="пусто — придумаем"></div>
+<div class="field"><label for="nr" class="small">Дата регистрации</label><input class="txt sm" id="nr" name="registered_at" type="date" value="{{ new_company.get('registered_at', '') }}"></div>
+<div class="field"><label for="nd" class="small">Руководитель</label><input class="txt sm" id="nd" name="director" maxlength="120" value="{{ new_company.get('director', '') }}" placeholder="Иванов Иван Иванович"></div>
+<div class="field"><label for="no" class="small">ОКВЭД</label><input class="txt sm" id="no" name="okved" maxlength="8" value="{{ new_company.get('okved', '46.90') }}"></div>
+<div class="field"><label for="nv" class="small">Выручка за год, ₽</label><input class="txt sm" id="nv" name="revenue_last_year" inputmode="numeric" data-money value="{{ new_company.get('revenue_last_year', '30 000 000') }}"></div>
+<div class="field"><label for="ne" class="small">Расходы за год, ₽</label><input class="txt sm" id="ne" name="expenses_last_year" inputmode="numeric" data-money value="{{ new_company.get('expenses_last_year', '27 000 000') }}"></div>
+</div>
+<button class="btn primary self-start" type="submit">Создать компанию</button>
+</form>
+</details>
+</div>
+
+{% if current %}
+<div class="inline" style="gap:8px 16px">
+{% if current.connected %}<span class="pill sm green">Подключена к кабинету</span><span class="small muted">Отправленных заявок: {{ app_count }}</span>
+{% else %}<span class="pill sm">Не подключена</span><span class="small muted">Клиент подключит по ИНН {{ current.inn }}: «Компания» → «Добавить по ИНН»</span>{% endif %}
+{% if current.custom and not current.connected %}<form method="post" action="/bank/sandbox/{{ current.inn }}/remove" style="margin-left:auto"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn" type="submit" style="min-height:36px;padding:0 12px">Удалить компанию</button></form>{% endif %}
+</div>
+
+{% set p = preview %}
+<div class="row">
+<div class="col-main stack" style="gap:20px">
+
+<section id="bki" class="card" aria-labelledby="bki-h" style="gap:16px">
+<div class="between"><h2 id="bki-h" class="h3">Кредитная история (БКИ)</h2>
+{% if bki.overridden %}<span class="pill sm blue">Изменено</span>{% else %}<span class="pill sm">Исходные данные</span>{% endif %}</div>
+{% if bki_error %}<div class="panel red small">{{ bki_error }}</div>{% endif %}
+
+<form method="post" action="/bank/sandbox/{{ current.inn }}/bki" class="stack-xs" style="gap:8px">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<span class="small muted">Готовые сценарии — убирают все просрочки и добавляют одну к первому кредиту:</span>
+<div class="inline" style="gap:8px">{% for code, name in presets.items() %}<button class="btn chip-btn" type="submit" name="action" value="preset:{{ code }}">{{ name }}</button>{% endfor %}</div>
+</form>
+
+<form method="post" action="/bank/sandbox/{{ current.inn }}/bki" class="stack" style="gap:14px">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+{% set blank = {"creditor": "", "kind": "кредит", "balance": none, "monthly_payment": none, "maturity": "", "current_overdue_days": 0, "current_overdue_amount": 0, "overdues_24m": []} %}
+{% set loans = bki.loans + [blank] %}
+<input type="hidden" name="n" value="{{ loans|length }}">
+{% for l in loans %}{% set i = loop.index0 %}{% set new = loop.last %}
+{% if new %}<details class="loan new"><summary>+ Добавить кредит</summary>{% else %}<fieldset class="loan">
+<legend>{{ l.creditor }}</legend>{% endif %}
+<div class="grid3" style="gap:12px 16px">
+<div class="field"><label for="l{{ i }}c" class="small">Кредитор</label><input class="txt sm" id="l{{ i }}c" name="l{{ i }}_creditor" maxlength="120" value="{{ l.creditor }}" placeholder="{% if new %}Например, Банк Б{% endif %}"></div>
+<div class="field"><label for="l{{ i }}k" class="small">Вид</label><select class="sel sm" id="l{{ i }}k" name="l{{ i }}_kind">{% for k in kinds %}<option {% if l.kind == k %}selected{% endif %}>{{ k }}</option>{% endfor %}</select></div>
+<div class="field"><label for="l{{ i }}m" class="small">Погашение</label><input class="txt sm" id="l{{ i }}m" name="l{{ i }}_maturity" maxlength="7" placeholder="ММ.ГГГГ" value="{{ l.maturity or '' }}"></div>
+<div class="field"><label for="l{{ i }}b" class="small">Остаток долга, ₽</label><input class="txt sm" id="l{{ i }}b" name="l{{ i }}_balance" inputmode="numeric" data-money value="{{ l.balance|money_input }}"></div>
+<div class="field"><label for="l{{ i }}p" class="small">Платёж в месяц, ₽</label><input class="txt sm" id="l{{ i }}p" name="l{{ i }}_monthly" inputmode="numeric" data-money value="{{ l.monthly_payment|money_input }}"></div>
+<div class="field"><span class="small">Просрочка сейчас</span><div class="inline" style="gap:6px;flex-wrap:nowrap">
+<label class="sr" for="l{{ i }}d">дней</label><input class="txt sm" id="l{{ i }}d" name="l{{ i }}_cur_days" inputmode="numeric" style="width:72px" value="{{ l.current_overdue_days or '' }}" placeholder="дней">
+<label class="sr" for="l{{ i }}a">сумма</label><input class="txt sm" id="l{{ i }}a" name="l{{ i }}_cur_amount" inputmode="numeric" data-money style="flex:1;min-width:0" value="{{ l.current_overdue_amount|money_input if l.current_overdue_amount else '' }}" placeholder="сумма, ₽"></div></div>
+</div>
+{% set hist = l.overdues_24m + [{"days": none, "amount": none, "months_ago": none}] %}
+<input type="hidden" name="l{{ i }}_n" value="{{ hist|length }}">
+<div class="stack-xs" style="gap:6px">
+<span class="small">Просрочки за 24 месяца{% if not l.overdues_24m %} — не было{% endif %}</span>
+<div class="tbl-wrap bordered"><table class="tbl od">
+<colgroup><col style="width:26%"><col style="width:38%"><col style="width:24%"><col style="width:12%"></colgroup>
+<thead><tr><th scope="col">Дней</th><th scope="col">Сумма, ₽</th><th scope="col">Месяцев назад</th><th scope="col" class="c">Удалить</th></tr></thead>
+<tbody>
+{% for o in hist %}{% set j = loop.index0 %}
+<tr {% if loop.last %}class="add"{% endif %}>
+<td><input class="txt sm" name="l{{ i }}_o{{ j }}_days" inputmode="numeric" aria-label="Дней просрочки" value="{{ o.days or '' }}" placeholder="{% if loop.last %}добавить{% endif %}"></td>
+<td><input class="txt sm" name="l{{ i }}_o{{ j }}_amount" inputmode="numeric" data-money aria-label="Сумма просрочки" value="{{ o.amount|money_input if o.amount is not none else '' }}"></td>
+<td><input class="txt sm" name="l{{ i }}_o{{ j }}_ago" inputmode="numeric" aria-label="Сколько месяцев назад" value="{{ o.months_ago if o.months_ago is not none else '' }}" placeholder="0–23"></td>
+<td class="c">{% if not loop.last %}<input type="checkbox" name="l{{ i }}_o{{ j }}_delete" value="1" aria-label="Удалить просрочку {{ o.days }} дн." title="Удалить при сохранении">{% endif %}</td>
+</tr>
+{% endfor %}
+</tbody></table></div>
+</div>
+{% if not new %}<label class="cb small" style="align-items:center;align-self:flex-start"><input type="checkbox" name="l{{ i }}_delete" value="1" style="margin:0">Удалить этот кредит</label>
+</fieldset>{% else %}</details>{% endif %}
+{% endfor %}
+<div class="inline" style="gap:8px">
+<button class="btn primary" type="submit" name="action" value="save">Сохранить кредитную историю</button>
+{% if bki.overridden %}<button class="btn" type="submit" name="action" value="reset">Вернуть исходную</button>{% endif %}
+</div>
+</form>
+</section>
+
+<section id="fns" class="card" aria-labelledby="fns-h" style="gap:16px">
+<div class="between"><h2 id="fns-h" class="h3">ЕГРЮЛ и «Прозрачный бизнес» (ФНС)</h2>
+{% if fns.overridden %}<span class="pill sm blue">Изменено</span>{% else %}<span class="pill sm">Исходные данные</span>{% endif %}</div>
+{% if fns_error %}<div class="panel red small">{{ fns_error }}</div>{% endif %}
+<form method="post" action="/bank/sandbox/{{ current.inn }}/fns" class="stack" style="gap:14px">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<div class="grid3" style="gap:12px 16px">
+<div class="field"><label for="fs" class="small">Статус в ЕГРЮЛ</label><select class="sel sm" id="fs" name="status">{% for code, name in statuses.items() %}<option value="{{ code }}" {% if fns.status == code %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
+<div class="field"><label for="fr" class="small">Дата регистрации</label><input class="txt sm" id="fr" name="registered_at" type="date" value="{{ fns.registered_at or '' }}"></div>
+<div class="field"><label for="ft" class="small">Налоговая недоимка, ₽</label><input class="txt sm" id="ft" name="tax_arrears" inputmode="numeric" data-money value="{{ fns.tax_arrears|money_input }}"></div>
+<div class="field"><label for="fv" class="small">Выручка за прошлый год, ₽</label><input class="txt sm" id="fv" name="revenue_last_year" inputmode="numeric" data-money value="{{ fns.revenue_last_year|money_input }}"></div>
+<div class="field"><label for="fe" class="small">Расходы за прошлый год, ₽</label><input class="txt sm" id="fe" name="expenses_last_year" inputmode="numeric" data-money value="{{ fns.expenses_last_year|money_input }}"></div>
+<div class="field"><label for="fw" class="small">Сотрудников</label><input class="txt sm" id="fw" name="employees" inputmode="numeric" value="{{ fns.employees if fns.employees is not none else '' }}"></div>
+</div>
+<p class="xs muted" style="margin:0">Ликвидация — стоп-фактор (отказ). Недоимка от 100 тыс. ₽ — к аналитику. Выручка в анкете выше этой больше чем на 30% — тоже к аналитику. Срок работы считается от даты регистрации.</p>
+<div class="inline" style="gap:8px">
+<button class="btn primary" type="submit" name="action" value="save">Сохранить сведения ФНС</button>
+{% if fns.overridden %}<button class="btn" type="submit" name="action" value="reset">Вернуть исходные</button>{% endif %}
+</div>
+</form>
+</section>
+</div>
+
+<aside class="col-side">
+<section class="card sticky" aria-labelledby="pv-h" style="gap:12px">
+<h2 id="pv-h" class="h3">Как это прочитает скоринг</h2>
+<div class="kv"><span class="muted small">Платёжная дисциплина</span><span class="m">{{ p.label }} · <span {% if p.points < 0 %}style="color:var(--amber)"{% elif p.points > 0 %}style="color:var(--blue)"{% endif %}>{% if p.points > 0 %}+{% elif p.points < 0 %}−{% endif %}{{ p.points|abs }} балл.</span></span></div>
+<div class="kv"><span class="muted small">Просрочки</span><span>существенных: {{ p.material }}{% if p.technical %}, мелких не учитываем: {{ p.technical }}{% endif %}</span></div>
+<div class="kv"><span class="muted small">Стоп-фактор</span>{% if p.knockout %}<span style="color:var(--red)"><strong>отказ:</strong> действующая просрочка больше 30 дней и 50 тыс. ₽</span>{% else %}<span>нет</span>{% endif %}</div>
+<div class="kv"><span class="muted small">Автоодобрение</span>{% if p.no_auto %}<span style="color:var(--amber-ink)">нет — {{ p.no_auto|lower }}</span>{% elif p.knockout %}<span>—</span>{% else %}<span>возможно, если хватит баллов</span>{% endif %}</div>
+<div class="kv"><span class="muted small">Долг по БКИ</span><span>{{ p.balance|money }} · платежи {{ p.monthly|money }} в месяц</span></div>
+<p class="xs muted" style="margin:0">Долг и платежи берутся в долговую нагрузку и покрытие платежей: банк сравнивает их с анкетой и берёт большее. Не учитываются задержки до 5 дней и суммы до 50 тыс. ₽ или 1% долга (590-П, порог EBA).</p>
+</section>
+</aside>
+</div>
+{% endif %}
+{% endblock %}

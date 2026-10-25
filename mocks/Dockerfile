@@ -6,8 +6,10 @@ WORKDIR /srv
 COPY mocks/requirements.txt ./requirements.txt
 RUN pip install -r requirements.txt
 COPY mocks ./mocks
-RUN useradd --create-home --uid 10002 mock
+RUN useradd --create-home --uid 10002 mock && mkdir -p /data && chown mock /data
 USER mock
+# Правки тестовых данных (страница «Тестовые данные»): том mockdata, переживают перезапуск
+ENV MOCK_DATA_DIR=/data
 ENV PORT=8101
 HEALTHCHECK --interval=5s --timeout=3s --retries=10 \
   CMD python -c "import os,urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:'+os.environ['PORT']+'/health', timeout=2).status == 200 else 1)"
