@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.api import schemas as s
 from app.db import get_db
 from app.models import Application, AuditLog, Company, CompanyMember, Product, ScoringModel, User
-from app.security import admin_user, bank_user, client_user, current_user, verify_password
+from app.security import TooManyAttempts, admin_user, authenticate, bank_user, client_user, current_user, start_session
 from app.services import analyst as analyst_svc
 from app.services import applications as svc
 from app.services import client_message, intake, precheck
@@ -42,13 +42,13 @@ def app_out(db: Session, app: Application) -> s.ApplicationOut:
 
 @router.post("/auth/login", response_model=s.UserOut, tags=["auth"])
 def login(body: s.LoginIn, request: Request, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.email == body.email.strip().lower()))
-    if user is None or not verify_password(body.password, user.password_hash):
+    try:
+        user = authenticate(db, body.email, body.password, request.client.host if request.client else None)
+    except TooManyAttempts as e:
+        raise HTTPException(429, str(e), headers={"Retry-After": str(e.retry_after)}) from None
+    if user is None:
         raise HTTPException(401, "Неверный email или пароль")
-    request.session.clear()
-    request.session["uid"] = user.id
-    db.add(AuditLog(actor_id=user.id, action="auth.login", entity="user", entity_id=user.id))
-    db.commit()
+    start_session(request, db, user)
     return user
 
 

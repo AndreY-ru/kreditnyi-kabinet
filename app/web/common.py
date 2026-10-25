@@ -6,13 +6,20 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.domain.transitions import NotFound
-from app.models import AuditLog, Company, Document, User
-from app.security import csrf_token, current_user, current_user_optional, verify_csrf, verify_password
+from app.models import Company, Document, User
+from app.security import (
+    TooManyAttempts,
+    authenticate,
+    csrf_token,
+    current_user,
+    current_user_optional,
+    start_session,
+    verify_csrf,
+)
 from app.services.applications import get_application
 from app.services.companies import user_companies
 from app.templating import templates
@@ -72,14 +79,14 @@ def login_page(request: Request, next: str = "", user: User | None = Depends(cur
 @router.post("/login", dependencies=[Depends(verify_csrf)])
 def login_submit(request: Request, email: str = Form(...), password: str = Form(...), next: str = Form(""),
                  db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.email == email.strip().lower()))
-    if user is None or not user.is_active or not verify_password(password, user.password_hash):
-        return page(request, "login.html", {"demo_users": DEMO_USERS, "next": next, "email": email,
-                                            "error": "Неверный email или пароль"}, status_code=401)
-    request.session.clear()
-    request.session["uid"] = user.id
-    db.add(AuditLog(actor_id=user.id, action="auth.login", entity="user", entity_id=user.id))
-    db.commit()
+    ctx = {"demo_users": DEMO_USERS, "next": next, "email": email}
+    try:
+        user = authenticate(db, email, password, request.client.host if request.client else None)
+    except TooManyAttempts as e:
+        return page(request, "login.html", {**ctx, "error": str(e)}, status_code=429)
+    if user is None:
+        return page(request, "login.html", {**ctx, "error": "Неверный email или пароль"}, status_code=401)
+    start_session(request, db, user)
     return RedirectResponse(safe_next(next), 303)
 
 

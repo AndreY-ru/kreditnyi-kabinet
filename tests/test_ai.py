@@ -37,11 +37,11 @@ def model(monkeypatch):
     calls: list[dict] = []
 
     def use(answer):
-        def fake_post(url, json, timeout):  # noqa: A002 — как у httpx
-            calls.append(json)
+        def fake_post(url, **kw):
+            calls.append(kw["json"])
             if answer is None:
                 raise httpx.ConnectError("нет модели")
-            return _Resp(answer if isinstance(answer, str) else globals()["json"].dumps(answer))
+            return _Resp(answer if isinstance(answer, str) else json.dumps(answer))
         monkeypatch.setattr(llm.httpx, "post", fake_post)
         return calls
     return use

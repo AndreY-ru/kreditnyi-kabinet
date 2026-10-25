@@ -47,3 +47,37 @@ def test_templates_have_no_inline_scripts():
     for p in Path("app/templates").rglob("*.html"):
         text = p.read_text(encoding="utf-8")
         assert not re.search(r"\son[a-z]+=\"|<script>|javascript:", text), p
+
+
+def test_password_guessing_is_limited():
+    from app.main import app
+
+    c = TestClient(app)
+    for _ in range(5):
+        assert c.post("/api/auth/login", json={"email": "anna@demo.local", "password": "wrong"}).status_code == 401
+    r = c.post("/api/auth/login", json={"email": "anna@demo.local", "password": "demo"})  # даже верный пароль
+    assert r.status_code == 429 and "Retry-After" in r.headers and "через" in r.json()["message"]
+    assert c.post("/api/auth/login", json={"email": "igor@demo.local", "password": "demo"}).status_code == 200
+
+
+def test_web_login_is_limited_too():
+    import re
+
+    from app.main import app
+
+    c = TestClient(app)
+    tok = re.search(r'name="csrf-token" content="([^"]+)"', c.get("/login").text).group(1)
+    for _ in range(5):
+        c.post("/login", data={"email": "maria@bank.local", "password": "x", "csrf_token": tok, "next": ""})
+    r = c.post("/login", data={"email": "maria@bank.local", "password": "demo", "csrf_token": tok, "next": ""})
+    assert r.status_code == 429 and "Слишком много попыток" in r.text
+
+
+def test_inactive_user_cannot_log_in_via_api(db):
+    from app.main import app
+    from app.models import User
+
+    u = db.query(User).filter_by(email="elena@demo.local").one()
+    u.is_active = False
+    db.commit()
+    assert TestClient(app).post("/api/auth/login", json={"email": "elena@demo.local", "password": "demo"}).status_code == 401

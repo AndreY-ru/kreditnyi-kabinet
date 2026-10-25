@@ -89,7 +89,8 @@ def create_app() -> FastAPI:
     @app.exception_handler(HTTPException)
     async def _http(request: Request, exc: HTTPException):
         if request.url.path.startswith("/api/") or request.headers.get("HX-Request"):
-            return JSONResponse({"error": "http_error", "message": exc.detail}, status_code=exc.status_code)
+            return JSONResponse({"error": "http_error", "message": exc.detail}, status_code=exc.status_code,
+                                headers=getattr(exc, "headers", None))
         return templates.TemplateResponse(request, "error.html", {"code": exc.status_code, "message": exc.detail},
                                           status_code=exc.status_code)
 

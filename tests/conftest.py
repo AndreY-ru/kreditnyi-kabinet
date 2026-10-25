@@ -28,6 +28,9 @@ def _env(tmp_path):
     engine = dbm.init_engine(settings.database_url)
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
+    from app import ratelimit
+
+    ratelimit.clear_all()  # счётчики попыток входа — свои у каждого теста
     integrations.http_factory["FNS_MOCK"] = lambda base: TestClient(fns_app)
     integrations.http_factory["BKI_MOCK"] = lambda base: TestClient(bki_app)
     from app.seed import seed_reference
