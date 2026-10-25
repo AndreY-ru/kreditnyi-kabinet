@@ -25,3 +25,17 @@
 {%- endmacro %}
 
 {% macro csrf_input(csrf) -%}<input type="hidden" name="csrf_token" value="{{ csrf }}">{%- endmacro %}
+
+{# Галочка «Залог» и раскрывающийся под ней блок: вид залога и стоимость. Раскрытие — CSS :has(), без JS #}
+{% macro collateral_option(checked, kind, value, id="col", sub=None, label_text="Залог") -%}
+<div class="opt choice">
+<label class="cb"><input type="checkbox" name="collateral" value="1" {% if checked %}checked{% endif %}><span class="stack-xs" style="gap:0"><span class="m">{{ label_text }}</span>{% if sub %}<span class="small muted">{{ sub }}</span>{% endif %}</span></label>
+<div class="reveal" role="group" aria-label="Что в залоге и сколько стоит">
+<div class="stack-xs" style="gap:8px"><span class="small">Что в залоге</span>
+<div class="seg sm grid3">{% for code, name in COLLATERAL_SHORT.items() %}<input type="radio" id="{{ id }}-{{ code }}" name="collateral_kind" value="{{ code }}" {% if kind == code %}checked{% endif %}><label for="{{ id }}-{{ code }}">{{ name }}</label>{% endfor %}</div></div>
+<div class="field" style="gap:8px"><label for="{{ id }}-value" class="small" style="font-weight:400">Примерная рыночная стоимость</label>
+<div class="input"><input id="{{ id }}-value" name="collateral_value" type="text" inputmode="numeric" data-money value="{{ value|money_input }}" placeholder="Например, 5 000 000" autocomplete="off"><span class="u">₽</span></div></div>
+<span class="xs muted">Банк учтёт его по цене быстрой продажи — от 40% до 100% стоимости, смотря что в залоге.</span>
+</div>
+</div>
+{%- endmacro %}

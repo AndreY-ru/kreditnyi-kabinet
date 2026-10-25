@@ -1,4 +1,5 @@
 {% extends "client/base.html" %}
+{% from "macros.html" import collateral_option %}
 {% block title %}Проверка шансов · Кредитный кабинет{% endblock %}
 {% block main %}
 <div class="stack-xs" style="gap:6px">
@@ -8,64 +9,44 @@
 </div>
 
 <div class="row">
-<form id="check-form" aria-label="Параметры проверки" class="card lg" style="flex:1 1 400px;min-width:0;gap:24px"
+<form id="check-form" aria-label="Параметры проверки" class="card lg form-col"
   action="/check" method="post"
   hx-post="/check/results" hx-target="#check-results" hx-trigger="change, input delay:500ms" hx-swap="innerHTML">
 <input type="hidden" name="csrf_token" value="{{ csrf }}">
-<fieldset class="stack-sm" style="gap:12px">
-<legend class="h3" style="margin-bottom:12px">Для чего нужны деньги?</legend>
-<div class="seg">
+<fieldset class="fsec first">
+<legend class="h3">Для чего нужны деньги?</legend>
+<div class="seg grid">
 {% for code, name in GOALS.items() %}
 <input type="radio" id="g-{{ code }}" name="goal" value="{{ code }}" {% if p.goal == code %}checked{% endif %}><label for="g-{{ code }}">{{ name }}</label>
 {% endfor %}
 </div>
 </fieldset>
 
-<div class="field" style="gap:8px">
+<div class="fsec field">
 <label for="sum" class="h3">Сумма</label>
 <div class="input big"><input id="sum" name="amount" type="text" inputmode="numeric" data-money value="{{ p.amount|money_input }}" autocomplete="off"><span class="u">₽</span></div>
 </div>
 
-<fieldset>
-<legend class="h3" style="margin-bottom:12px">Срок</legend>
-<div class="seg">
+<fieldset class="fsec">
+<legend class="h3">Срок</legend>
+<div class="seg grid3">
 {% for t in terms %}<input type="radio" id="t-{{ t }}" name="term" value="{{ t }}" {% if p.term == t %}checked{% endif %}><label for="t-{{ t }}">{{ t }} мес.</label>{% endfor %}
 </div>
 </fieldset>
 
-<fieldset class="stack-sm" style="gap:12px">
-<legend class="h3" style="margin-bottom:12px">Обеспечение</legend>
-<label class="cb"><input type="checkbox" name="collateral" value="1" {% if p.has_collateral %}checked{% endif %}><span class="m">Есть залог</span></label>
-<label class="cb"><input type="checkbox" name="guarantor" value="1" {% if p.has_guarantor %}checked{% endif %}><span class="m">Собственник готов стать поручителем</span></label>
+<fieldset class="fsec">
+<legend class="h3">Обеспечение</legend>
+<div class="choices">
+{{ collateral_option(p.has_collateral, p.collateral_kind, p.collateral_value, id="cc", label_text="Залог", sub="Снижает ставку и позволяет взять больше") }}
+<label class="cb choice"><input type="checkbox" name="guarantor" value="1" {% if p.has_guarantor %}checked{% endif %}><span class="stack-xs" style="gap:0"><span class="m">Поручительство собственника</span><span class="small muted">Нужно для большинства кредитов для ООО</span></span></label>
+</div>
 </fieldset>
 
-<fieldset class="stack-sm" style="gap:16px">
-<legend class="h3" style="margin-bottom:4px">Финансы за 12 месяцев</legend>
-{% if source %}<span class="small muted">Подставили {{ source }} — поправьте, если знаете точнее.</span>{% endif %}
-<div class="grid2" style="gap:16px 20px">
-<div class="field"><label for="revenue">Выручка</label>
-<div class="input"><input id="revenue" name="revenue" type="text" inputmode="numeric" data-money value="{{ p.revenue|money_input }}"><span class="u">₽</span></div></div>
-<div class="field"><label for="profit">Прибыль, примерно</label>
-<div class="input"><input id="profit" name="profit" type="text" inputmode="numeric" data-money data-signed value="{{ p.profit|money_input }}"><span class="u">₽</span></div>
-<span class="hint">До уплаты процентов и налогов. Убыток — с минусом</span></div>
-<div class="field"><label for="debt">Остаток по кредитам и лизингу</label>
-<div class="input"><input id="debt" name="debt" type="text" inputmode="numeric" data-money value="{{ p.debt|money_input }}"><span class="u">₽</span></div>
-<span class="hint">Если кредитов нет — 0</span></div>
-<div class="field"><label for="trend">Выручка за год</label>
-<select id="trend" name="trend" class="sel">{% for code, name in trends.items() %}<option value="{{ code }}" {% if p.trend == code %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
-</div>
-</fieldset>
-<fieldset class="stack-sm" style="gap:12px">
-<legend class="h3" style="margin-bottom:4px">Просрочки по кредитам за 2 года</legend>
-<span class="small muted">Отвечайте честно: после подачи банк проверит это в бюро кредитных историй.</span>
-<div class="seg">
-{% for code, name in overdues.items() %}<input type="radio" id="o-{{ code }}" name="overdues" value="{{ code }}" {% if p.overdues == code %}checked{% endif %}><label for="o-{{ code }}">{{ name }}</label>{% endfor %}
-</div>
-</fieldset>
+{% include "partials/check_fin_fields.html" %}
 <noscript><button class="btn dark" type="submit">Пересчитать</button></noscript>
 </form>
 
-<div id="check-results" style="flex:999 1 560px;min-width:0" class="stack">
+<div id="check-results" class="stack results-col">
 {% include "partials/check_results.html" %}
 </div>
 </div>

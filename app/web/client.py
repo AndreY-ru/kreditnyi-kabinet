@@ -18,7 +18,14 @@ from app.security import client_user, verify_csrf
 from app.services import applications as svc
 from app.services import intake, precheck
 from app.services.catalog import GOALS, TERMS, match_products
-from app.services.companies import add_company_by_inn, invite_member, remove_member, require_member, self_check
+from app.services.companies import (
+    POSITIONS,
+    add_company_by_inn,
+    invite_member,
+    remove_member,
+    require_member,
+    self_check,
+)
 from app.services.validation import active_consent, validate
 from app.services.views import application_view, label
 from app.web.common import active_company, flash, page, partial
@@ -36,7 +43,7 @@ def parse_money(v: str | None, signed: bool = False) -> int | None:
     digits = re.sub(r"[^\d]", "", s)
     if not digits:
         return None
-    n = int(digits)
+    n = int(digits[:19])  # дальше — заведомо ошибка ввода; диапазон проверит сервис, а int() не упадёт на 5000 цифрах
     return -n if neg else n
 
 
@@ -119,7 +126,7 @@ def _company_page_ctx(request: Request, db: Session, user: User, **extra) -> dic
                           .order_by(CompanyMember.id)).all()
         me = next((m for m in team if m.user_id == user.id), None)
     return {**ctx, "nav": "company", "error": None, "inn": "", "invite_error": None, "team": team, "me": me,
-            **extra}
+            "positions": POSITIONS, **extra}
 
 
 @router.get("/company", response_class=HTMLResponse)
@@ -128,7 +135,7 @@ def company_page(request: Request, db: Session = Depends(get_db), user: User = D
 
 
 @router.post("/company/add")
-def company_add(request: Request, inn: str = Form(...), position: str = Form("Представитель"),
+def company_add(request: Request, inn: str = Form(...), position: str = Form("Генеральный директор"),
                 db: Session = Depends(get_db), user: User = Depends(client_user)):
     try:
         c = add_company_by_inn(db, user, inn, position)
@@ -150,7 +157,7 @@ def company_invite(request: Request, email: str = Form(...), position: str = For
     if company is None:
         return RedirectResponse("/company", 303)
     try:
-        m = invite_member(db, user, company.id, email=email, position=position.strip() or "Сотрудник",
+        m = invite_member(db, user, company.id, email=email, position=position,
                           can_apply=True, can_sign=bool(can_sign))
     except DomainError as e:
         db.rollback()
@@ -184,15 +191,19 @@ def company_member_remove(request: Request, user_id: int, db: Session = Depends(
 
 # --- Подбор ---------------------------------------------------------------------------
 
-def _podbor_params(goal: str, amount: str, term: int, collateral: str | None, guarantor: str | None) -> dict:
+def _podbor_params(goal: str, amount: str, term: int, collateral: str | None, guarantor: str | None,
+                   collateral_kind: str | None = None, collateral_value: str | int | None = None) -> dict:
     a = parse_money(amount) or 0
     return {"goal": goal if goal in GOALS else "working", "amount": a, "amount_raw": amount, "term": term,
-            "collateral": bool(collateral), "guarantor": bool(guarantor)}
+            "collateral": bool(collateral), "guarantor": bool(guarantor),
+            "collateral_kind": collateral_kind if collateral_kind in svc.COLLATERAL_KINDS else None,
+            "collateral_value": parse_money(str(collateral_value or ""))}
 
 
 @router.get("/podbor", response_class=HTMLResponse)
 def podbor(request: Request, goal: str = "working", amount: str = "5 000 000", term: int = 24,
            collateral: str | None = None, guarantor: str | None = "1", app_id: int | None = None,
+           collateral_kind: str | None = None, collateral_value: str = "",
            db: Session = Depends(get_db), user: User = Depends(client_user)):
     ctx = _company_ctx(request, db, user)
     draft = None
@@ -203,7 +214,8 @@ def podbor(request: Request, goal: str = "working", amount: str = "5 000 000", t
         goal, amount, term = draft.goal, f"{draft.amount:,}".replace(",", " "), draft.term_months
         collateral = "1" if draft.has_collateral else None
         guarantor = "1" if draft.has_guarantor else None
-    params = _podbor_params(goal, amount, term, collateral, guarantor)
+        collateral_kind, collateral_value = draft.collateral_kind, str(draft.collateral_value or "")
+    params = _podbor_params(goal, amount, term, collateral, guarantor, collateral_kind, collateral_value)
     matches = _matches(db, params, ctx["company"])
     check = self_check(db, ctx["company"]) if ctx["company"] else None
     return page(request, "client/podbor.html", {**ctx, "nav": "podbor", "p": params, "matches": matches,
@@ -225,6 +237,8 @@ def podbor_describe(request: Request, text: str = Form(""), user: User = Depends
          "guarantor": "" if r.guarantor is False else "1"}
     if r.collateral:
         q["collateral"] = "1"
+        if r.collateral_kind:
+            q["collateral_kind"] = r.collateral_kind
     return RedirectResponse("/podbor?" + urlencode(q), 303)
 
 
@@ -238,9 +252,10 @@ def _matches(db: Session, p: dict, company: Company | None):
 @router.get("/podbor/results", response_class=HTMLResponse)
 def podbor_results(request: Request, goal: str = "working", amount: str = "", term: int = 24,
                    collateral: str | None = None, guarantor: str | None = None, app_id: int | None = None,
+                   collateral_kind: str | None = None, collateral_value: str = "",
                    db: Session = Depends(get_db), user: User = Depends(client_user)):
     company, _ = active_company(request, db, user)
-    params = _podbor_params(goal, amount, term, collateral, guarantor)
+    params = _podbor_params(goal, amount, term, collateral, guarantor, collateral_kind, collateral_value)
     draft = svc.get_application(db, user, app_id) if app_id else None
     return partial(request, "partials/podbor_results.html",
                    {"p": params, "matches": _matches(db, params, company), "draft": draft})
@@ -250,12 +265,13 @@ def podbor_results(request: Request, goal: str = "working", amount: str = "", te
 def new_application(request: Request, product_id: int = Form(...), goal: str = Form("working"),
                     amount: str = Form(...), term: int = Form(...), collateral: str | None = Form(None),
                     guarantor: str | None = Form(None), app_id: int | None = Form(None),
+                    collateral_kind: str | None = Form(None), collateral_value: str = Form(""),
                     db: Session = Depends(get_db), user: User = Depends(client_user)):
     company, _ = active_company(request, db, user)
     product = db.get(Product, product_id)
     if company is None or product is None:
         raise ValidationFailed("Сначала добавьте компанию")
-    p = _podbor_params(goal, amount, term, collateral, guarantor)
+    p = _podbor_params(goal, amount, term, collateral, guarantor, collateral_kind, collateral_value)
     if app_id:
         app = svc.get_application(db, user, app_id)
         svc.update_params(db, app, amount=p["amount"], term_months=p["term"], goal=p["goal"],
@@ -263,6 +279,8 @@ def new_application(request: Request, product_id: int = Form(...), goal: str = F
     else:
         app = svc.create_draft(db, user, company, product, amount=p["amount"], term_months=p["term"], goal=p["goal"],
                                has_collateral=p["collateral"], has_guarantor=p["guarantor"])
+    if app.has_collateral and (p["collateral_kind"] or p["collateral_value"]):  # что указали в подборе — в черновик
+        svc.update_params(db, app, collateral_kind=p["collateral_kind"], collateral_value=p["collateral_value"])
     db.commit()
     return RedirectResponse(f"/applications/{app.id}/edit", 303)
 
@@ -286,7 +304,9 @@ def _check_params(q, defaults: dict | None = None) -> precheck.PrecheckParams:
         term=int(term) if term.isdigit() else 12,
         has_collateral=bool(q.get("collateral")), has_guarantor=bool(q.get("guarantor")),
         revenue=money("revenue"), profit=money("profit", signed=True), debt=money("debt") or 0,
-        trend=trend if trend in TRENDS else "FLAT",
+        monthly=money("monthly"), trend=trend if trend in TRENDS else "FLAT",
+        collateral_kind=q.get("collateral_kind") if q.get("collateral_kind") in svc.COLLATERAL_KINDS else None,
+        collateral_value=parse_money(q.get("collateral_value") or ""),
         overdues=overdues if overdues in precheck.OVERDUES else "none",
     )
 
@@ -300,12 +320,25 @@ async def check_page(request: Request, db: Session = Depends(get_db), user: User
         return RedirectResponse("/company", 303)
     q = dict(request.query_params) if request.method == "GET" else dict(await request.form())
     if "amount" not in q:  # первый заход: разумные значения по умолчанию
-        q.update(amount="3 000 000", term="12", guarantor="1")
+        q.update(amount="2 000 000", term="24", guarantor="1")
     d = precheck.defaults(db, company)
     p = _check_params(q, d)
     return page(request, "client/check.html", {**ctx, "nav": "check", "p": p, "terms": TERMS, "trends": TRENDS,
                                                "overdues": precheck.OVERDUES, "source": d.get("source"),
                                                "r": precheck.run(db, company, p)})
+
+
+@router.post("/check/panel", response_class=HTMLResponse)
+async def check_panel(request: Request, db: Session = Depends(get_db), user: User = Depends(client_user)):
+    """Окно «Оценить шансы» поверх подбора: параметры — из формы подбора, финансы — из прошлой заявки или ФНС."""
+    company, _ = active_company(request, db, user)
+    if company is None:
+        return HTMLResponse("")
+    d = precheck.defaults(db, company)
+    p = _check_params(dict(await request.form()), d)
+    return partial(request, "partials/chance_dialog.html", {
+        "p": p, "r": precheck.run(db, company, p), "trends": TRENDS, "overdues": precheck.OVERDUES,
+        "source": d.get("source")})
 
 
 @router.post("/check/results", response_class=HTMLResponse)
@@ -351,6 +384,7 @@ def _edit_ctx(request: Request, db: Session, user: User, app: Application, show_
                                                    CompanyMember.company_id == app.company_id))
     return {**ctx, "app": app, "company": app.company, "member": member,
             "errors": {e["field"]: e["message"] for e in errors} if show_errors else {},
+            "liab_errors": [e["message"] for e in errors if e["field"].startswith("liabilities.")] if show_errors else [],
             "error_count": len(errors), "show_errors": show_errors, "step": 3}
 
 
@@ -369,6 +403,11 @@ async def edit_save(request: Request, app_id: int, db: Session = Depends(get_db)
     form = await request.form()
     data, liabs = _form_financials(form)
     svc.update_financials(db, app, data, liabs)
+    if app.has_collateral and "collateral_kind" in form:
+        kind = str(form.get("collateral_kind") or "")
+        svc.update_params(db, app, collateral_kind=kind if kind in svc.COLLATERAL_KINDS else None,
+                          collateral_value=parse_money(str(form.get("collateral_value") or "")),
+                          collateral_desc=str(form.get("collateral_desc") or "").strip() or None)
     db.commit()
     action = form.get("action", "save")
     if action == "autosave":

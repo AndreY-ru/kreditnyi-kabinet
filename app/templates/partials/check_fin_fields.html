@@ -1,0 +1,29 @@
+{# Финансы и просрочки: страница «Проверка шансов» и окно «Оценить шансы» в подборе #}
+<fieldset class="fsec">
+<legend class="h3">Финансы за 12 месяцев</legend>
+{% if source %}<p class="small muted" style="margin:0">Подставили {{ source }} — поправьте, если знаете точнее.</p>{% endif %}
+<div class="grid2 fin">
+<div class="field"><label for="revenue">Выручка</label>
+<div class="input"><input id="revenue" name="revenue" type="text" inputmode="numeric" data-money value="{{ p.revenue|money_input }}"><span class="u">₽</span></div>
+<span class="hint">За последние 12 месяцев</span></div>
+<div class="field"><label for="profit">Прибыль</label>
+<div class="input"><input id="profit" name="profit" type="text" inputmode="numeric" data-money data-signed value="{{ p.profit|money_input }}"><span class="u">₽</span></div>
+<span class="hint">До % и налогов; убыток — с минусом</span></div>
+<div class="field"><label for="debt">Долг по кредитам</label>
+<div class="input"><input id="debt" name="debt" type="text" inputmode="numeric" data-money value="{{ p.debt|money_input }}"><span class="u">₽</span></div>
+<span class="hint">Остаток вместе с лизингом; нет — 0</span></div>
+<div class="field"><label for="monthly">Платёж в месяц</label>
+<div class="input"><input id="monthly" name="monthly" type="text" inputmode="numeric" data-money value="{{ p.monthly|money_input }}"><span class="u">₽</span></div>
+<span class="hint">По этим кредитам; не знаете — пусто</span></div>
+<div class="field span2"><label for="trend">Как менялась выручка за год</label>
+<select id="trend" name="trend" class="sel">{% for code, name in trends.items() %}<option value="{{ code }}" {% if p.trend == code %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
+</div>
+</fieldset>
+
+<fieldset class="fsec">
+<legend class="h3">Просрочки по кредитам за 2 года</legend>
+<p class="small muted" style="margin:0">Отвечайте честно: после подачи банк проверит это в бюро кредитных историй.</p>
+<div class="seg grid">
+{% for code, name in overdues.items() %}<input type="radio" id="o-{{ code }}" name="overdues" value="{{ code }}" {% if p.overdues == code %}checked{% endif %}><label for="o-{{ code }}">{{ name }}</label>{% endfor %}
+</div>
+</fieldset>

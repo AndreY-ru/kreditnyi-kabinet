@@ -11,6 +11,15 @@
     var msg = e.target.getAttribute('data-confirm');
     if (msg && !window.confirm(msg)) e.preventDefault();
   }, true);
+  // Окно поверх страницы (оценка шансов из подбора): htmx положил содержимое — открываем.
+  // Закрыть: крестик (form method=dialog), Esc — так умеет сам <dialog>, клик по затемнению — ниже
+  document.addEventListener('htmx:afterSwap', function (e) {
+    var d = e.detail.target;
+    if (d && d.tagName === 'DIALOG' && !d.open) d.showModal();
+  });
+  document.addEventListener('click', function (e) {
+    if (e.target.tagName === 'DIALOG' && e.target.open) e.target.close();
+  });
   // Выбор в списке сразу применяет фильтр
   document.addEventListener('change', function (e) {
     if (e.target.matches('select[data-autosubmit]')) e.target.form.submit();

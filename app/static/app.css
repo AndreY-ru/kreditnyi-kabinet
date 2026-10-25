@@ -339,3 +339,70 @@ table.queue tr.mine{background:var(--blue-row)}
 .dec:has(#k-counter:checked) .g-reasons,.dec:has(#k-decline:checked) .g-reasons{display:flex}
 .dec:has(#k-approve:checked) .l-approve,.dec:has(#k-counter:checked) .l-counter,.dec:has(#k-info:checked) .l-info,.dec:has(#k-decline:checked) .l-decline{display:inline}
 .busy-note{display:none}.busy-note.htmx-request{display:inline}
+
+/* Раскрытие под галочкой без JS: блок виден, только пока галочка стоит (залог в подборе, проверке, заявке) */
+.opt{display:flex;flex-direction:column;gap:10px}
+.reveal{display:none;flex-direction:column;gap:14px;margin-left:32px;padding:14px 16px 16px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--soft2)}
+.choice .reveal{margin:4px 0 0;padding:14px 0 0;border:0;border-top:1px solid var(--line);border-radius:0;background:none}
+.opt:has(>.cb input:checked)>.reveal{display:flex;animation:reveal .18s ease-out}
+.reveal .input{min-height:44px}
+.seg.sm{gap:6px}
+.seg.sm label{min-height:36px;min-width:0;padding:0 12px;border-radius:8px;font-size:13px}
+.seg.sm input:checked+label{border-width:1px}
+@keyframes reveal{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.opt:has(>.cb input:checked)>.reveal{animation:none}}
+@media (max-width:600px){.reveal{margin-left:0}}
+
+
+/* Тестовые данные источников — пульт демо-стенда у администратора */
+fieldset.loan,details.loan{display:flex;flex-direction:column;gap:14px;min-width:0;margin:0;padding:14px 16px 16px;border:1px solid var(--line);border-radius:var(--r-md)}
+fieldset.loan legend{padding:0 6px;font-weight:600}
+details.loan{display:block;border-style:dashed;background:var(--soft2)}
+details.loan>summary{cursor:pointer;font-weight:600;list-style:none}
+details.loan>summary::-webkit-details-marker{display:none}
+details.loan[open]>summary{margin-bottom:14px}
+details.loan[open]>:not(summary)+:not(summary){margin-top:14px}
+.chip-btn{min-height:36px;padding:0 12px;font-size:14px;font-weight:500}
+table.od{width:100%;table-layout:fixed}
+table.od th,table.od td{padding:6px 8px}
+table.od .c{text-align:center}
+table.od input.txt{width:100%;min-width:0}
+table.od input[type=checkbox]{width:18px;height:18px;margin:0;accent-color:var(--ink)}
+.kv{display:flex;flex-direction:column;gap:2px;padding-top:10px;border-top:1px solid var(--line)}
+.sticky{position:sticky;top:16px}
+details.newco{position:relative}
+details.newco>summary{list-style:none;cursor:pointer}
+details.newco>summary::-webkit-details-marker{display:none}
+details.newco[open]>summary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.newco-form{position:absolute;right:0;top:calc(100% + 8px);z-index:20;width:min(520px,calc(100vw - 32px));box-shadow:0 12px 32px rgba(16,24,40,.16)}
+@media (max-width:600px){.newco-form{position:static;width:auto;margin-top:8px}}
+
+/* Форма слева от результатов (проверка шансов, подбор): ровная колонка, разделы и опции */
+.form-col{flex:0 1 460px;min-width:min(100%,340px);gap:0}
+.results-col{flex:1 1 520px;min-width:0}
+.form-col .fsec{display:flex;flex-direction:column;gap:12px;margin:0;padding:20px 0;border-top:1px solid var(--line)}
+.form-col .fsec.first{padding-top:0;border-top:0}
+.form-col .fsec>legend{float:left;width:100%;margin-bottom:12px}
+.form-col .fsec>legend+*{clear:both}
+.choices{display:flex;flex-direction:column;gap:10px}
+.choice{padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-md);background:#fff;transition:border-color .15s}
+.choice:has(>input:checked),.choice:has(>.cb input:checked){border-color:var(--ink)}
+.seg.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.seg.grid label,.seg.grid3 label{min-width:0;padding:6px 10px;text-align:center;line-height:1.25}
+.seg.sm.grid3 label{padding:4px 6px}
+.grid2.fin{gap:14px 16px;align-items:start}
+.grid2.fin .field>label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grid2 .span2{grid-column:1 / -1}
+@media (max-width:900px){.form-col{flex:1 1 100%}}
+
+/* Окно поверх страницы: оценка шансов из подбора */
+dialog.sheet{width:min(1120px,calc(100vw - 32px));max-width:none;max-height:calc(100vh - 48px);padding:0;border:0;border-radius:var(--r-lg);background:var(--bg);color:inherit;box-shadow:0 24px 64px rgba(16,24,40,.28)}
+dialog.sheet::backdrop{background:rgba(16,24,40,.45)}
+dialog.sheet[open]{animation:sheet-in .18s ease-out}
+.sheet-inner{display:flex;flex-direction:column;max-height:calc(100vh - 48px)}
+.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:20px 24px;border-bottom:1px solid var(--line);background:var(--card)}
+.sheet-body{overflow:auto;padding:20px 24px 24px}
+body:has(dialog.sheet[open]){overflow:hidden}
+@keyframes sheet-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){dialog.sheet[open]{animation:none}}
+@media (max-width:600px){dialog.sheet{width:100vw;height:100dvh;max-height:100dvh;margin:0;border-radius:0}.sheet-inner{max-height:100dvh}.sheet-head,.sheet-body{padding:16px}}

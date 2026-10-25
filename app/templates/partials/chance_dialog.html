@@ -1,0 +1,27 @@
+{# Окно «Оценить шансы» поверх подбора: параметры — из формы подбора, финансы — подставлены, результат — на лету #}
+<div class="sheet-inner">
+<div class="sheet-head">
+<div class="stack-xs" style="gap:4px"><h2 id="chance-h" class="h-lg">Шансы на одобрение</h2>
+<span class="small muted">{{ GOALS.get(p.goal, p.goal) }} · {{ p.amount|money }} · {{ p.term }} мес.{% if p.has_collateral %} · залог{% if p.collateral_kind %}: {{ COLLATERAL_SHORT.get(p.collateral_kind, '')|lower }}{% endif %}{% endif %}{% if p.has_guarantor %} · поручитель{% endif %}</span></div>
+<form method="dialog"><button class="btn icon" type="submit" aria-label="Закрыть окно" title="Закрыть (Esc)">✕</button></form>
+</div>
+<div class="sheet-body">
+<div class="row">
+<form id="chance-form" aria-label="Финансы для оценки" class="card lg form-col"
+  action="/check" method="post"
+  hx-post="/check/results" hx-target="#chance-results" hx-trigger="change, input delay:500ms" hx-swap="innerHTML">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<input type="hidden" name="goal" value="{{ p.goal }}">
+<input type="hidden" name="amount" value="{{ p.amount }}">
+<input type="hidden" name="term" value="{{ p.term }}">
+{% if p.has_collateral %}<input type="hidden" name="collateral" value="1">{% if p.collateral_kind %}<input type="hidden" name="collateral_kind" value="{{ p.collateral_kind }}">{% endif %}{% if p.collateral_value %}<input type="hidden" name="collateral_value" value="{{ p.collateral_value }}">{% endif %}{% endif %}
+{% if p.has_guarantor %}<input type="hidden" name="guarantor" value="1">{% endif %}
+<p class="small muted fsec first" style="margin:0">Цель, сумму, срок и обеспечение берём из подбора — поменяйте их там, окно пересчитает при следующем открытии. Здесь — финансы и кредитная история.</p>
+{% include "partials/check_fin_fields.html" %}
+</form>
+<div id="chance-results" class="stack results-col">
+{% include "partials/check_results.html" %}
+</div>
+</div>
+</div>
+</div>

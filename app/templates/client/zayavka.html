@@ -44,8 +44,9 @@
 <div><dt>Ваши полномочия</dt><dd>{{ member.authority or member.position if member else '—' }}</dd></div>
 </dl>
 <p class="small muted">Данные из ЕГРЮЛ (смоделировано). Если что-то неверно, сначала обновите сведения в налоговой — банк сверяет заявку с реестром.</p>
-{% if errors.get('has_guarantor') or errors.get('has_collateral') or errors.get('amount') or errors.get('term_months') %}
-<div class="panel red"><span class="err">{{ errors.get('has_guarantor') or errors.get('has_collateral') or errors.get('amount') or errors.get('term_months') }}</span> · <a href="/podbor?app_id={{ app.id }}">Изменить параметры</a></div>
+{% set perr = errors.get('product_id') or errors.get('has_guarantor') or errors.get('has_collateral') or errors.get('amount') or errors.get('term_months') %}
+{% if perr %}
+<div class="panel red"><span class="err">{{ perr }}</span> · <a href="/podbor?app_id={{ app.id }}">Изменить параметры</a></div>
 {% endif %}
 </section>
 
@@ -71,7 +72,7 @@
 </div>
 <div class="field">
 <label for="employees">Сотрудников в штате</label>
-<div class="input"><input id="employees" name="employees" type="text" inputmode="numeric" value="{{ f.employees if f and f.employees is not none else '' }}"></div>
+<div class="input"><input id="employees" name="employees" type="text" inputmode="numeric" maxlength="7" value="{{ f.employees if f and f.employees is not none else '' }}"></div>
 <span class="hint">Подставили из «Прозрачного бизнеса»</span>
 </div>
 </div>
@@ -84,10 +85,10 @@
 <tbody id="liabilities-body">
 {% for l in app.liabilities %}
 <tr>
-<td><label class="sr" for="lc{{ loop.index }}">Кредитор</label><input id="lc{{ loop.index }}" name="l_creditor" value="{{ l.creditor }}"></td>
+<td><label class="sr" for="lc{{ loop.index }}">Кредитор</label><input id="lc{{ loop.index }}" name="l_creditor" maxlength="120" value="{{ l.creditor }}"></td>
 <td><label class="sr" for="lb{{ loop.index }}">Остаток</label><input id="lb{{ loop.index }}" name="l_balance" inputmode="numeric" data-money value="{{ l.balance|money_input }}"></td>
 <td><label class="sr" for="lp{{ loop.index }}">Платёж</label><input id="lp{{ loop.index }}" name="l_payment" inputmode="numeric" data-money value="{{ l.monthly_payment|money_input }}"></td>
-<td><label class="sr" for="lm{{ loop.index }}">Погашение</label><input id="lm{{ loop.index }}" name="l_maturity" placeholder="ММ.ГГГГ" value="{{ l.maturity or '' }}"></td>
+<td><label class="sr" for="lm{{ loop.index }}">Погашение</label><input id="lm{{ loop.index }}" name="l_maturity" placeholder="ММ.ГГГГ" maxlength="7" inputmode="decimal" value="{{ l.maturity or '' }}"></td>
 <td class="act"><button type="button" class="btn icon" aria-label="Удалить строку" data-del-row>{{ icon('trash', 18, 2) }}</button></td>
 </tr>
 {% else %}
@@ -97,15 +98,33 @@
 </table>
 </div>
 <template id="liability-row"><tr>
-<td><input name="l_creditor" aria-label="Кредитор" placeholder="Банк или лизинговая компания"></td>
+<td><input name="l_creditor" aria-label="Кредитор" maxlength="120" placeholder="Банк или лизинговая компания"></td>
 <td><input name="l_balance" aria-label="Остаток долга" inputmode="numeric" data-money></td>
 <td><input name="l_payment" aria-label="Платёж в месяц" inputmode="numeric" data-money></td>
-<td><input name="l_maturity" aria-label="Погашение" placeholder="ММ.ГГГГ"></td>
+<td><input name="l_maturity" aria-label="Погашение" placeholder="ММ.ГГГГ" maxlength="7" inputmode="decimal"></td>
 <td class="act"><button type="button" class="btn icon" aria-label="Удалить строку" data-del-row>{{ icon('trash', 18, 2) }}</button></td>
 </tr></template>
+{% for msg in liab_errors %}<span class="err" role="alert">{{ msg }}</span>{% endfor %}
 <button type="button" class="btn soft self-start" data-add-liability>{{ icon('plus', 16, 2.2) }}Добавить обязательство</button>
 </div>
 </section>
+
+{% if app.has_collateral %}
+<section aria-labelledby="col-h" class="card" style="gap:16px">
+<div class="between" style="align-items:baseline"><h2 id="col-h" class="h3" style="font-size:18px">Залог</h2><span class="small muted">Примерно — точную стоимость оценит банк</span></div>
+<div class="grid2" style="gap:20px 24px">
+<fieldset class="field" style="grid-column:1 / -1;gap:8px">
+<legend class="lbl" style="margin-bottom:8px">Что в залоге</legend>
+<div class="seg sm">{% for code, name in COLLATERAL_SHORT.items() %}<input type="radio" id="zc-{{ code }}" name="collateral_kind" value="{{ code }}" {% if app.collateral_kind == code %}checked{% endif %}><label for="zc-{{ code }}">{{ name }}</label>{% endfor %}</div>
+{% if errors.get('collateral_kind') %}<span class="err">{{ errors['collateral_kind'] }}</span>{% endif %}
+</fieldset>
+{{ money_field('collateral_value', 'Рыночная стоимость', app.collateral_value, 'За сколько можно продать сейчас') }}
+<div class="field" style="grid-column:1 / -1"><label for="collateral_desc">Описание</label>
+<input class="txt" id="collateral_desc" name="collateral_desc" maxlength="500" value="{{ app.collateral_desc or '' }}" placeholder="Например: склад 1 200 м² в Подольске, в собственности с 2019 года"></div>
+</div>
+<p class="small muted" style="margin:0">Банк учитывает залог с дисконтом — по цене быстрой продажи: {% for code, c in COLLATERAL.items() if c.haircut %}{{ c.name|lower }} — {{ ((1 - c.haircut) * 100)|round|int }}%{% if not loop.last %}, {% endif %}{% endfor %} стоимости. Залог снижает ставку и позволяет взять больше лимита без залога.</p>
+</section>
+{% endif %}
 
 <div class="between" style="padding:4px 0">
 <a href="/podbor?app_id={{ app.id }}" class="btn lg">Назад</a>

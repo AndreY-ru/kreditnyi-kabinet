@@ -32,7 +32,7 @@
 <input type="hidden" name="goal" value="{{ p.goal }}">
 <input type="hidden" name="amount" value="{{ p.amount }}">
 <input type="hidden" name="term" value="{{ p.term }}">
-{% if p.collateral %}<input type="hidden" name="collateral" value="1">{% endif %}
+{% if p.collateral %}<input type="hidden" name="collateral" value="1">{% if p.collateral_kind %}<input type="hidden" name="collateral_kind" value="{{ p.collateral_kind }}">{% endif %}{% if p.collateral_value %}<input type="hidden" name="collateral_value" value="{{ p.collateral_value }}">{% endif %}{% endif %}
 {% if p.guarantor %}<input type="hidden" name="guarantor" value="1">{% endif %}
 {% if draft %}<input type="hidden" name="app_id" value="{{ draft.id }}">{% endif %}
 {% if m.eligible %}

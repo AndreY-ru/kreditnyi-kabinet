@@ -1,6 +1,7 @@
 """Jinja2: шаблоны и фильтры форматирования (деньги, даты в часовом поясе отображения)."""
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -12,8 +13,13 @@ from fastapi.templating import Jinja2Templates
 from app.config import settings
 from app.domain.states import BANK_LABELS, CLIENT_LABELS
 from app.services.catalog import GOAL_PURPOSE, GOALS
+from app.services.scoring import DEFAULT_MODEL, pd_of
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+STATIC = Path(__file__).parent / "static"
+# Метка версии — хеш содержимого: после обновления браузер не возьмёт старые стили и скрипты из кеша
+ASSETS = {name: f"/static/{name}?v={hashlib.sha256((STATIC / name).read_bytes()).hexdigest()[:10]}"
+          for name in ("app.css", "app.js")}
 TZ = ZoneInfo(settings.display_tz)
 
 
@@ -31,7 +37,12 @@ def money(v: int | float | Decimal | None, suffix: str = " ₽") -> str:
     return f"{int(v):,}".replace(",", " ") + suffix
 
 
-def money_input(v: int | None) -> str:
+def money_input(v: int | str | None) -> str:
+    if isinstance(v, str):  # форма вернулась с ошибкой — показываем то, что ввели
+        digits = re.sub(r"[^\d]", "", v)[:16]
+        if not digits:
+            return v
+        v = (-1 if v.strip().startswith("-") else 1) * int(digits)
     return "" if v is None else f"{int(v):,}".replace(",", " ")
 
 
@@ -115,7 +126,10 @@ env = templates.env
 env.filters.update(money=money, money_input=money_input, mln=mln, dt=dt, dshort=dshort, ddate=ddate, rate=rate,
                    years_since=years_since)
 env.globals.update(GOALS=GOALS, GOAL_PURPOSE=GOAL_PURPOSE, days_left=days_left, hours_left=hours_left,
-                   plural=plural)
+                   plural=plural, COLLATERAL=DEFAULT_MODEL["credit"]["collateral"], pd_of=pd_of,
+                   COLLATERAL_SHORT={"REAL_ESTATE": "Недвижимость", "VEHICLE": "Транспорт", "EQUIPMENT": "Оборудование",
+                                     "GOODS": "Товары", "DEPOSIT": "Депозит"},
+                   asset=ASSETS.__getitem__)
 
 env.tests["search"] = lambda value, pattern: re.search(pattern, str(value)) is not None
 env.globals["label_of"] = lambda status: BANK_LABELS.get(status, (status, "neutral"))

@@ -1,5 +1,5 @@
 {% extends "client/base.html" %}
-{% from "macros.html" import icon, status_dot %}
+{% from "macros.html" import icon, status_dot, collateral_option %}
 {% block title %}Подбор кредита · Кредитный кабинет{% endblock %}
 {% block main %}
 <div class="stack-xs" style="gap:6px">
@@ -30,13 +30,13 @@
 {% endif %}
 
 <div class="row">
-<form id="podbor-form" aria-label="Параметры подбора" class="card lg" style="flex:1 1 400px;min-width:0;gap:28px"
+<form id="podbor-form" aria-label="Параметры подбора" class="card lg form-col" style="gap:28px"
   action="/podbor" method="get"
   hx-get="/podbor/results" hx-target="#results" hx-trigger="change, input delay:400ms from:#sum" hx-swap="innerHTML">
 {% if draft %}<input type="hidden" name="app_id" value="{{ draft.id }}">{% endif %}
 <fieldset class="stack-sm" style="gap:12px">
 <legend class="h3" style="margin-bottom:12px">1. Для чего нужны деньги?</legend>
-<div class="seg">
+<div class="seg grid">
 {% for code, name in GOALS.items() %}
 <input type="radio" id="g-{{ code }}" name="goal" value="{{ code }}" {% if p.goal == code %}checked{% endif %}><label for="g-{{ code }}">{{ name }}</label>
 {% endfor %}
@@ -51,15 +51,15 @@
 
 <fieldset>
 <legend class="h3" style="margin-bottom:12px">3. На какой срок?</legend>
-<div class="seg">
+<div class="seg grid3">
 {% for t in terms %}<input type="radio" id="t-{{ t }}" name="term" value="{{ t }}" {% if p.term == t %}checked{% endif %}><label for="t-{{ t }}">{{ t }} мес.</label>{% endfor %}
 </div>
 </fieldset>
 
-<fieldset class="stack-sm" style="gap:12px">
+<fieldset class="stack-sm choices" style="gap:10px">
 <legend class="h3" style="margin-bottom:12px">4. Что можете предложить банку?</legend>
-<label class="cb"><input type="checkbox" name="collateral" value="1" {% if p.collateral %}checked{% endif %}><span class="stack-xs" style="gap:0"><span class="m">Залог</span><span class="small muted">Недвижимость, оборудование или транспорт</span></span></label>
-<label class="cb"><input type="checkbox" name="guarantor" value="1" {% if p.guarantor %}checked{% endif %}><span class="stack-xs" style="gap:0"><span class="m">Поручительство собственника</span><span class="small muted">Обязательно для большинства продуктов для ООО</span></span></label>
+{{ collateral_option(p.collateral, p.collateral_kind, p.collateral_value, id="pc", sub="Снижает ставку и позволяет взять больше") }}
+<label class="cb choice"><input type="checkbox" name="guarantor" value="1" {% if p.guarantor %}checked{% endif %}><span class="stack-xs" style="gap:0"><span class="m">Поручительство собственника</span><span class="small muted">Нужно для большинства кредитов для ООО</span></span></label>
 </fieldset>
 <noscript><button class="btn dark" type="submit">Показать продукты</button></noscript>
 </form>
@@ -77,7 +77,9 @@
 {% endfor %}
 </div>
 <div class="between" style="gap:8px 16px"><p class="small muted" style="flex:1 1 280px">Это подсказка, а не решение банка. Кредитную историю запросим только после вашего согласия.</p>
-<a href="/check?goal={{ p.goal }}&amount={{ p.amount }}&term={{ p.term }}{% if p.collateral %}&collateral=1{% endif %}{% if p.guarantor %}&guarantor=1{% endif %}" class="btn">Оценить шансы с этой суммой</a></div>
+{# Кнопка отправляет текущую форму подбора: сумма, срок и залог — как сейчас на экране, а не при загрузке #}
+<button type="submit" form="podbor-form" formaction="/check" formmethod="get" class="btn"
+  hx-post="/check/panel" hx-include="#podbor-form" hx-target="#chance-dialog" hx-swap="innerHTML" hx-disabled-elt="this">Оценить шансы с этой суммой</button></div>
 </section>
 {% endif %}
 <div id="results" class="stack">
@@ -85,4 +87,5 @@
 </div>
 </div>
 </div>
+<dialog id="chance-dialog" class="sheet" aria-labelledby="chance-h"></dialog>
 {% endblock %}
