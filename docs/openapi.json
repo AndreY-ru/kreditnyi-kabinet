@@ -3,7 +3,7 @@
     "info": {
         "title": "Умный кредитный кабинет предпринимателя",
         "description": "MVP для хакатона «Альфа Будущее». Все данные синтетические, ФНС и БКИ смоделированы.",
-        "version": "1.1.0"
+        "version": "1.2.0"
     },
     "paths": {
         "/api/auth/login": {
@@ -1555,12 +1555,96 @@
                 }
             }
         },
+        "/api/admin/scoring-models/{version}/activate": {
+            "post": {
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Activate Scoring Model",
+                "description": "Включить другую версию карты — например, откатиться. Новые заявки посчитаются по ней.",
+                "operationId": "activate_scoring_model_api_admin_scoring_models__version__activate_post",
+                "parameters": [
+                    {
+                        "name": "version",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Version"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/products": {
+            "post": {
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Create Product",
+                "description": "Новый продукт: сразу появляется в подборе и проверке шансов (если active).",
+                "operationId": "create_product_api_admin_products_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProductIn"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProductOut"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/admin/products/{product_id}": {
             "patch": {
                 "tags": [
                     "admin"
                 ],
                 "summary": "Patch Product",
+                "description": "Поменять поля продукта; версия растёт, изменения — в журнале. Архив — active=false.",
                 "operationId": "patch_product_api_admin_products__product_id__patch",
                 "parameters": [
                     {
@@ -1719,6 +1803,28 @@
                     "has_collateral": {
                         "type": "boolean",
                         "title": "Has Collateral"
+                    },
+                    "collateral_kind": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Collateral Kind"
+                    },
+                    "collateral_value": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Collateral Value"
                     },
                     "has_guarantor": {
                         "type": "boolean",
@@ -1893,13 +1999,46 @@
                     "collateral_desc": {
                         "anyOf": [
                             {
-                                "type": "string"
+                                "type": "string",
+                                "maxLength": 500
                             },
                             {
                                 "type": "null"
                             }
                         ],
                         "title": "Collateral Desc"
+                    },
+                    "collateral_kind": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "REAL_ESTATE",
+                                    "VEHICLE",
+                                    "EQUIPMENT",
+                                    "GOODS",
+                                    "DEPOSIT"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Collateral Kind"
+                    },
+                    "collateral_value": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 1000000000000000.0,
+                                "minimum": 0.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Collateral Value",
+                        "description": "Рыночная стоимость, ₽"
                     },
                     "has_guarantor": {
                         "anyOf": [
@@ -2000,8 +2139,19 @@
                     },
                     "position": {
                         "type": "string",
+                        "enum": [
+                            "Генеральный директор",
+                            "Индивидуальный предприниматель",
+                            "Учредитель",
+                            "Финансовый директор",
+                            "Главный бухгалтер",
+                            "Бухгалтер",
+                            "Бухгалтер на аутсорсе",
+                            "Юрист",
+                            "Менеджер"
+                        ],
                         "title": "Position",
-                        "default": "Представитель"
+                        "default": "Генеральный директор"
                     }
                 },
                 "type": "object",
@@ -2363,6 +2513,7 @@
                         "anyOf": [
                             {
                                 "type": "integer",
+                                "maximum": 1000000000000000.0,
                                 "minimum": 0.0
                             },
                             {
@@ -2375,6 +2526,7 @@
                         "anyOf": [
                             {
                                 "type": "integer",
+                                "maximum": 1000000000000000.0,
                                 "minimum": 0.0
                             },
                             {
@@ -2386,7 +2538,9 @@
                     "ebit": {
                         "anyOf": [
                             {
-                                "type": "integer"
+                                "type": "integer",
+                                "maximum": 1000000000000000.0,
+                                "minimum": -1000000000000000.0
                             },
                             {
                                 "type": "null"
@@ -2398,6 +2552,7 @@
                         "anyOf": [
                             {
                                 "type": "integer",
+                                "maximum": 1000000000000000.0,
                                 "minimum": 0.0
                             },
                             {
@@ -2426,6 +2581,7 @@
                         "anyOf": [
                             {
                                 "type": "integer",
+                                "maximum": 1000000.0,
                                 "minimum": 0.0
                             },
                             {
@@ -2592,6 +2748,25 @@
                         ],
                         "title": "Has Collateral"
                     },
+                    "collateral_kind": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "REAL_ESTATE",
+                                    "VEHICLE",
+                                    "EQUIPMENT",
+                                    "GOODS",
+                                    "DEPOSIT"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Collateral Kind",
+                        "description": "Что в залоге — по словам рядом с «залог»"
+                    },
                     "has_guarantor": {
                         "anyOf": [
                             {
@@ -2641,17 +2816,19 @@
                 "properties": {
                     "creditor": {
                         "type": "string",
-                        "maxLength": 255,
+                        "maxLength": 120,
                         "minLength": 1,
                         "title": "Creditor"
                     },
                     "balance": {
                         "type": "integer",
+                        "maximum": 1000000000000000.0,
                         "minimum": 0.0,
                         "title": "Balance"
                     },
                     "monthly_payment": {
                         "type": "integer",
+                        "maximum": 1000000000000000.0,
                         "minimum": 0.0,
                         "title": "Monthly Payment",
                         "default": 0
@@ -2659,13 +2836,15 @@
                     "maturity": {
                         "anyOf": [
                             {
-                                "type": "string"
+                                "type": "string",
+                                "pattern": "^(0[1-9]|1[0-2])\\.\\d{4}$"
                             },
                             {
                                 "type": "null"
                             }
                         ],
-                        "title": "Maturity"
+                        "title": "Maturity",
+                        "description": "ММ.ГГГГ"
                     }
                 },
                 "type": "object",
@@ -2793,8 +2972,19 @@
                     },
                     "position": {
                         "type": "string",
+                        "enum": [
+                            "Генеральный директор",
+                            "Индивидуальный предприниматель",
+                            "Учредитель",
+                            "Финансовый директор",
+                            "Главный бухгалтер",
+                            "Бухгалтер",
+                            "Бухгалтер на аутсорсе",
+                            "Юрист",
+                            "Менеджер"
+                        ],
                         "title": "Position",
-                        "default": "Сотрудник"
+                        "default": "Бухгалтер"
                     },
                     "can_apply": {
                         "type": "boolean",
@@ -2993,6 +3183,19 @@
                         "title": "Debt",
                         "description": "Остаток по действующим кредитам и лизингу"
                     },
+                    "monthly_payment": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "minimum": 0.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Monthly Payment",
+                        "description": "Платёж по действующим кредитам в месяц. Не указан — из прошлой заявки или оценка по остатку"
+                    },
                     "revenue_trend": {
                         "anyOf": [
                             {
@@ -3014,11 +3217,44 @@
                         "enum": [
                             "none",
                             "minor",
+                            "major",
                             "current"
                         ],
                         "title": "Overdues",
-                        "description": "Просрочки за 2 года со слов клиента; в БКИ до согласия не ходим",
+                        "description": "Просрочки за 2 года со слов клиента: minor — до 30 дней, major — больше; в БКИ до согласия не ходим",
                         "default": "none"
+                    },
+                    "collateral_kind": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "REAL_ESTATE",
+                                    "VEHICLE",
+                                    "EQUIPMENT",
+                                    "GOODS",
+                                    "DEPOSIT"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Collateral Kind"
+                    },
+                    "collateral_value": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 1000000000000000.0,
+                                "minimum": 0.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Collateral Value",
+                        "description": "Рыночная стоимость залога"
                     }
                 },
                 "type": "object",
@@ -3119,6 +3355,205 @@
                 ],
                 "title": "PrecheckProduct"
             },
+            "ProductIn": {
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 120,
+                        "minLength": 2,
+                        "title": "Name"
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "LOAN",
+                            "CREDIT_LINE",
+                            "OVERDRAFT"
+                        ],
+                        "title": "Kind"
+                    },
+                    "description": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "maxLength": 1000
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Description"
+                    },
+                    "goals": {
+                        "items": {
+                            "type": "string",
+                            "enum": [
+                                "working",
+                                "equipment",
+                                "cash_gap",
+                                "new_direction",
+                                "refinance"
+                            ]
+                        },
+                        "type": "array",
+                        "minItems": 1,
+                        "title": "Goals"
+                    },
+                    "min_amount": {
+                        "type": "integer",
+                        "maximum": 1000000000000.0,
+                        "minimum": 10000.0,
+                        "title": "Min Amount"
+                    },
+                    "max_amount": {
+                        "type": "integer",
+                        "maximum": 1000000000000.0,
+                        "minimum": 10000.0,
+                        "title": "Max Amount"
+                    },
+                    "min_term": {
+                        "type": "integer",
+                        "maximum": 120.0,
+                        "minimum": 1.0,
+                        "title": "Min Term"
+                    },
+                    "max_term": {
+                        "type": "integer",
+                        "maximum": 120.0,
+                        "minimum": 1.0,
+                        "title": "Max Term"
+                    },
+                    "min_business_months": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 240.0,
+                                "minimum": 0.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Min Business Months"
+                    },
+                    "requires_collateral": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Requires Collateral"
+                    },
+                    "unsecured_max": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 1000000000000.0,
+                                "minimum": 0.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Unsecured Max"
+                    },
+                    "requires_guarantor": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Requires Guarantor"
+                    },
+                    "base_rate": {
+                        "anyOf": [
+                            {
+                                "type": "number",
+                                "exclusiveMaximum": 100.0,
+                                "exclusiveMinimum": 0.0
+                            },
+                            {
+                                "type": "string",
+                                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+                            }
+                        ],
+                        "title": "Base Rate"
+                    },
+                    "auto_limit": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 1000000000000.0,
+                                "minimum": 0.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Auto Limit"
+                    },
+                    "decision_days": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 60.0,
+                                "minimum": 1.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Decision Days"
+                    },
+                    "gov_support": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Gov Support"
+                    },
+                    "active": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Active"
+                    },
+                    "code": {
+                        "type": "string",
+                        "pattern": "^[A-Z][A-Z0-9_]{1,39}$",
+                        "title": "Code",
+                        "description": "Латиница, цифры и _, например SEASON_LOAN"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "name",
+                    "kind",
+                    "goals",
+                    "min_amount",
+                    "max_amount",
+                    "min_term",
+                    "max_term",
+                    "base_rate",
+                    "code"
+                ],
+                "title": "ProductIn"
+            },
             "ProductOut": {
                 "properties": {
                     "id": {
@@ -3204,6 +3639,11 @@
                         "type": "boolean",
                         "title": "Gov Support"
                     },
+                    "active": {
+                        "type": "boolean",
+                        "title": "Active",
+                        "default": true
+                    },
                     "version": {
                         "type": "integer",
                         "title": "Version"
@@ -3235,6 +3675,169 @@
             },
             "ProductPatch": {
                 "properties": {
+                    "name": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "maxLength": 120,
+                                "minLength": 2
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Name"
+                    },
+                    "kind": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "LOAN",
+                                    "CREDIT_LINE",
+                                    "OVERDRAFT"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Kind"
+                    },
+                    "description": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "maxLength": 1000
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Description"
+                    },
+                    "goals": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "type": "string",
+                                    "enum": [
+                                        "working",
+                                        "equipment",
+                                        "cash_gap",
+                                        "new_direction",
+                                        "refinance"
+                                    ]
+                                },
+                                "type": "array",
+                                "minItems": 1
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Goals"
+                    },
+                    "min_amount": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 1000000000000.0,
+                                "minimum": 10000.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Min Amount"
+                    },
+                    "max_amount": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 1000000000000.0,
+                                "minimum": 10000.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Amount"
+                    },
+                    "min_term": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 120.0,
+                                "minimum": 1.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Min Term"
+                    },
+                    "max_term": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 120.0,
+                                "minimum": 1.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Term"
+                    },
+                    "min_business_months": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 240.0,
+                                "minimum": 0.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Min Business Months"
+                    },
+                    "requires_collateral": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Requires Collateral"
+                    },
+                    "unsecured_max": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 1000000000000.0,
+                                "minimum": 0.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Unsecured Max"
+                    },
+                    "requires_guarantor": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Requires Guarantor"
+                    },
                     "base_rate": {
                         "anyOf": [
                             {
@@ -3256,6 +3859,7 @@
                         "anyOf": [
                             {
                                 "type": "integer",
+                                "maximum": 1000000000000.0,
                                 "minimum": 0.0
                             },
                             {
@@ -3263,6 +3867,30 @@
                             }
                         ],
                         "title": "Auto Limit"
+                    },
+                    "decision_days": {
+                        "anyOf": [
+                            {
+                                "type": "integer",
+                                "maximum": 60.0,
+                                "minimum": 1.0
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Decision Days"
+                    },
+                    "gov_support": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Gov Support"
                     },
                     "active": {
                         "anyOf": [
@@ -3277,7 +3905,8 @@
                     }
                 },
                 "type": "object",
-                "title": "ProductPatch"
+                "title": "ProductPatch",
+                "description": "Поля, которые нужно поменять; остальные остаются как есть. Код продукта не меняется."
             },
             "QueueItemOut": {
                 "properties": {
