@@ -60,6 +60,7 @@ MVP для хакатона «Альфа Будущее» (кейс Альфа-�
 - [Разработка без Docker](#разработка-без-docker)
 - [Структура](#структура)
 - [Потенциал развития](#потенциал-развития)
+- [Команда](#команда)
 
 ---
 
@@ -554,6 +555,35 @@ docs/            исследование и модель процесса (rese
   приглашение коллег одноразовой ссылкой, удаление аккаунта по запросу (152-ФЗ).
 - **Безопасность:** шифрование чувствительных полей, общий счётчик попыток входа (Redis) для нескольких копий
   приложения, SSO для сотрудников банка, токены для внешних клиентов API.
+
+---
+
+# Команда
+
+<table>
+<tr>
+<td align="center" width="33%" valign="top">
+<a href="https://github.com/AndreY-ru"><img src="https://github.com/AndreY-ru.png?size=160" width="96" alt="Андрей"></a><br>
+<b>Андрей</b><br>
+<sub><a href="https://github.com/AndreY-ru">@AndreY-ru</a></sub><br><br>
+Код: сайт, конвейер заявки, скоринг, ИИ-помощники, Docker
+</td>
+<td align="center" width="33%" valign="top">
+<a href="https://github.com/katy-kon"><img src="https://github.com/katy-kon.png?size=160" width="96" alt="Екатерина"></a><br>
+<b>Екатерина</b><br>
+<sub><a href="https://github.com/katy-kon">@katy-kon</a></sub><br><br>
+Дизайн интерфейса и анализ
+</td>
+<td align="center" width="33%" valign="top">
+<a href="https://github.com/y4b0hue418"><img src="https://github.com/y4b0hue418.png?size=160" width="96" alt="Михаил"></a><br>
+<b>Михаил</b><br>
+<sub><a href="https://github.com/y4b0hue418">@y4b0hue418</a></sub><br><br>
+Обзор и разбор решения, презентация
+</td>
+</tr>
+</table>
+
+**Тестировали все вместе.**
 
 ---
 
