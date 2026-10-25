@@ -112,7 +112,10 @@ def seed_reference(db: Session) -> None:
     for spec in PRODUCTS:
         if db.scalar(select(Product).where(Product.code == spec["code"])) is None:
             db.add(Product(**spec))
-    if db.scalar(select(ScoringModel)) is None:
+    if db.scalar(select(ScoringModel).where(ScoringModel.version == DEFAULT_MODEL["version"])) is None:
+        # новая версия карты приходит вместе с кодом: прежние остаются в истории, активной становится новая
+        for old in db.scalars(select(ScoringModel)).all():
+            old.active = False
         db.add(ScoringModel(version=DEFAULT_MODEL["version"], config=DEFAULT_MODEL, active=True))
     for email, name, role, position in USERS:
         if db.scalar(select(User).where(User.email == email)) is None:
@@ -134,10 +137,13 @@ def seed_reference(db: Session) -> None:
 
 def _draft(db: Session, email: str, inn: str, code: str, amount: int, term: int, goal: str, *,
            revenue: int, expenses: int, ebit: int, amort: int, trend: str, liabs: list[tuple],
-           collateral: bool = False, guarantor: bool = True):
+           collateral: tuple[str, int, str] | None = None, guarantor: bool = True):
     user, company, product = _user(db, email), _company(db, inn), _product(db, code)
     app = svc.create_draft(db, user, company, product, amount=amount, term_months=term, goal=goal,
-                           has_collateral=collateral, has_guarantor=guarantor)
+                           has_collateral=collateral is not None, has_guarantor=guarantor)
+    if collateral:
+        kind, value, desc = collateral
+        svc.update_params(db, app, collateral_kind=kind, collateral_value=value, collateral_desc=desc)
     svc.update_financials(db, app, {"revenue": revenue, "expenses": expenses, "ebit": ebit, "amortization": amort,
                                     "revenue_trend": trend},
                           [{"creditor": c, "balance": b, "monthly_payment": p, "maturity": m} for c, b, p, m in liabs])
@@ -219,7 +225,8 @@ def seed_applications(db: Session) -> None:
     with _ago(3.4):
         kim, a6 = _draft(db, "kim@demo.local", "7724112230", "CREDIT_LINE", 18_000_000, 48, "equipment",
                          revenue=260_000_000, expenses=231_000_000, ebit=27_000_000, amort=4_000_000, trend="GROWTH",
-                         liabs=[("Банк В", 14_000_000, 690_000, "05.2028")], collateral=True)
+                         liabs=[("Банк В", 14_000_000, 690_000, "05.2028")],
+                         collateral=("REAL_ESTATE", 26_000_000, "Производственный корпус в Хабаровске, 2 400 м²"))
     with _ago(3):
         _submit(db, kim, a6)
 

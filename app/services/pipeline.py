@@ -172,6 +172,9 @@ def build_inputs(db: Session, app: Application) -> ScoringInputs:
     loans = bki.get("loans", [])
     declared_debt = sum(l.balance for l in app.liabilities)
     bki_debt = int(bki.get("total_balance") or 0)
+    declared_monthly = sum(l.monthly_payment or 0 for l in app.liabilities)
+    fns_revenue = checks.get("transparent", {}).get("revenue_last_year")
+    fns_expenses = checks.get("transparent", {}).get("expenses_last_year")
     return ScoringInputs(
         amount=app.amount, term_months=app.term_months,
         business_months=app.company.business_months(),
@@ -182,6 +185,10 @@ def build_inputs(db: Session, app: Application) -> ScoringInputs:
         existing_debt=max(declared_debt, bki_debt),
         tax_arrears=int(checks.get("transparent", {}).get("tax_arrears") or 0),
         has_collateral=app.has_collateral, has_guarantor=app.has_guarantor, bki_loans=loans,
+        existing_monthly=max(declared_monthly, int(bki.get("total_monthly") or 0)) or None,
+        collateral_kind=app.collateral_kind, collateral_value=app.collateral_value,
+        fns_revenue=int(fns_revenue) if fns_revenue is not None else None,
+        fns_expenses=int(fns_expenses) if fns_expenses is not None else None,
     )
 
 
@@ -197,10 +204,11 @@ def _score_and_decide(db: Session, app: Application) -> None:
     cfg = active_model(db)
     inp = build_inputs(db, app)
     out = score(inp, cfg)
+    result = decide(app.product, inp, out, cfg)
     db.add(ScoringResult(application_id=app.id, model_version=out.model_version, score=out.score, base=out.base,
                          zone=out.zone, factors=out.factors, knockouts=out.knockouts,
-                         inputs={**inp.as_dict(), "debt_load": out.debt_load, "ebitda": out.ebitda}))
-    result = decide(app.product, inp, out, cfg)
+                         inputs={**inp.as_dict(), "debt_load": out.debt_load, "ebitda": out.ebitda,
+                                 **result.metrics}))
 
     if result.status == "DECLINED":
         conditions: dict[str, Any] = {"knockouts": out.knockouts}

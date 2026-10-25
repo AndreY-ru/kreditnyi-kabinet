@@ -1,0 +1,53 @@
+{
+  "version": "v1.0",
+  "scale": {
+    "score": 60,
+    "pd": 0.05,
+    "pdo": 10
+  },
+  "base": 64,
+  "zones": {
+    "decline_below": 46,
+    "auto_from": 68
+  },
+  "points": {
+    "business_age": [
+      -2,
+      0,
+      2,
+      4,
+      5
+    ],
+    "payment_discipline": {
+      "clean": 2,
+      "minor_old": 0,
+      "minor_recent": -2,
+      "serious": -6,
+      "default": -16
+    },
+    "guarantor": 3,
+    "revenue_trend": {
+      "GROWTH": 2,
+      "FLAT": 0,
+      "DECLINE": -3
+    },
+    "request_to_revenue": [
+      0,
+      -2,
+      -5,
+      -10
+    ],
+    "debt_load": [
+      0,
+      -11,
+      -22,
+      -32,
+      -45
+    ],
+    "debt_load_no_profit": -61,
+    "tax_arrears": {
+      "small": -2,
+      "large": -6
+    }
+  }
+}

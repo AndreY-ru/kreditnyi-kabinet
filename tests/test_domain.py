@@ -7,9 +7,18 @@ import pytest
 
 from app.domain.states import TERMINAL, TRANSITIONS, Actor, S, can_transition
 from app.services.companies import inn_is_valid
-from app.services.credit_logic import annuity
+from app.services.credit_logic import annuity, decide
 from app.services.scoring import DEFAULT_MODEL, ScoringInputs, score
-from tests.helpers import LIQUIDATING, SV, company_id, consent_all, draft, product_id, submit_and_process
+from tests.helpers import (
+    GOOD_FIN,
+    LIQUIDATING,
+    SV,
+    company_id,
+    consent_all,
+    draft,
+    product_id,
+    submit_and_process,
+)
 
 
 def test_terminal_states_have_no_exits():
@@ -44,13 +53,13 @@ def _inputs(**kw) -> ScoringInputs:
     return ScoringInputs(**base)
 
 
-def test_scorecard_matches_design_example():
-    # Пример из макета карточки аналитика: 55 + 33 − 25 = 63
+def test_scorecard_matches_card_example():
+    # Карточка KR-0002 («Северный ветер», линия 12 млн): 64 + 12 − 24 = 52, вероятность дефолта ≈ 8,4%
     out = score(_inputs())
-    assert out.score == 63 and out.zone == "GRAY"
+    assert out.score == 52 and out.zone == "GRAY" and abs(out.pd - 0.084) < 0.001
     pts = {f["code"]: f["points"] for f in out.factors}
-    assert pts == {"business_age": 12, "payment_discipline": 10, "guarantor": 6, "revenue_trend": 5,
-                   "request_to_revenue": -7, "debt_load": -18}
+    assert pts == {"business_age": 5, "payment_discipline": 2, "guarantor": 3, "revenue_trend": 2,
+                   "request_to_revenue": -2, "debt_load": -22}
 
 
 def test_scoring_is_deterministic_and_bounded():
@@ -66,6 +75,51 @@ def test_knockouts():
     assert [k["code"] for k in out.knockouts] == ["COMPANY_STATUS"]
     loans = [{"creditor": "Б", "current_overdue_days": 45, "current_overdue_amount": 380_000, "overdues_24m": []}]
     assert [k["code"] for k in score(_inputs(bki_loans=loans)).knockouts] == ["ACTIVE_OVERDUE"]
+
+
+def _product(code: str):
+    from app.models import Product
+    from app.seed import PRODUCTS
+
+    return Product(**next(p for p in PRODUCTS if p["code"] == code))
+
+
+def test_payment_coverage_depends_on_term():
+    """Долговая нагрузка не видит срока, покрытие платежей — видит: 2 млн на 6 мес. и на 36 мес. — разные решения."""
+    working = _product("WORKING")
+    short = _inputs(amount=2_000_000, term_months=6, existing_monthly=218_000)
+    res = decide(working, short, score(short), DEFAULT_MODEL)
+    assert res.status == "MANUAL_REVIEW" and res.metrics["dscr"] < 1
+    assert any(r.startswith("Платежи по всем кредитам") for r in res.review_reasons)
+    assert res.hint["amount"] < 2_000_000 and "или вся сумма на" in res.hint["text"]
+    long = _inputs(amount=2_000_000, term_months=36, existing_monthly=218_000)
+    res = decide(working, long, score(long), DEFAULT_MODEL)
+    assert res.status == "APPROVED_AUTO" and res.metrics["dscr"] >= 1.25
+
+
+def test_revenue_far_above_fns_goes_to_analyst():
+    working = _product("WORKING")
+    inflated = _inputs(amount=1_000_000, term_months=24, revenue=150_000_000, fns_revenue=84_600_000)
+    res = decide(working, inflated, score(inflated), DEFAULT_MODEL)
+    assert res.status == "MANUAL_REVIEW" and "FINANCIALS" in res.reason_codes
+    assert any("на 77% выше, чем в отчётности ФНС" in r for r in res.review_reasons)
+    grown = _inputs(amount=1_000_000, term_months=24, revenue=95_000_000, fns_revenue=84_600_000)  # +12% — рост
+    assert decide(working, grown, score(grown), DEFAULT_MODEL).status == "APPROVED_AUTO"
+    young = _inputs(amount=1_000_000, term_months=24, business_months=8, min_business_months=0, fns_revenue=0)
+    assert not any("ФНС" in r for r in decide(working, young, score(young), DEFAULT_MODEL).review_reasons)
+
+
+def test_pipeline_takes_payments_from_application_and_revenue_from_fns(anna, db):
+    from app.models import Decision, ScoringResult
+
+    app = draft(anna, SV, "WORKING", 3_000_000, 6, fin={**GOOD_FIN, "revenue": 150_000_000, "expenses": 140_000_000})
+    consent_all(anna, app["id"])
+    assert submit_and_process(anna, app["id"])["status"] == "MANUAL_REVIEW"
+    sc = db.query(ScoringResult).filter_by(application_id=app["id"]).one()
+    assert sc.model_version == "v1.0" and sc.inputs["existing_monthly"] == 218_000
+    assert sc.inputs["fns_revenue"] == 84_600_000 and sc.inputs["dscr"] < 1.25
+    reasons = db.query(Decision).filter_by(application_id=app["id"]).one().review_reasons
+    assert any("отчётности ФНС" in r for r in reasons) and any("Платежи по всем кредитам" in r for r in reasons)
 
 
 def test_annuity():
@@ -144,3 +198,30 @@ def test_new_draft_takes_financials_from_last_complete_application(anna):
         app = s.get(Application, newest)
         assert app.financials.ebit == 6_200_000 and app.financials.revenue_trend == "GROWTH"
         assert len(app.liabilities) == 2
+
+
+def test_profit_far_above_fns_goes_to_analyst():
+    """Завысить прибыль выгоднее всего: она в долговой нагрузке и покрытии. Сравниваем рентабельность с ФНС."""
+    working = _product("WORKING")
+    fns = dict(revenue=84_600_000, fns_revenue=84_600_000, fns_expenses=76_900_000)  # по ФНС 9,1% выручки
+    inflated = _inputs(amount=1_000_000, term_months=24, ebit=15_000_000, amortization=300_000, **fns)  # 18,1%
+    res = decide(working, inflated, score(inflated), DEFAULT_MODEL)
+    assert res.status == "MANUAL_REVIEW" and "FINANCIALS" in res.reason_codes
+    assert any("Прибыль в анкете — 18,1% выручки, по отчётности ФНС — 9,1%" in r for r in res.review_reasons)
+    honest = _inputs(amount=1_000_000, term_months=24, ebit=10_000_000, amortization=1_500_000, **fns)  # 13,6%
+    assert not any("ФНС" in r for r in decide(working, honest, score(honest), DEFAULT_MODEL).review_reasons)
+    loss = _inputs(amount=1_000_000, term_months=24, revenue=40_000_000, fns_revenue=40_000_000,
+                   fns_expenses=42_000_000, ebit=4_000_000, amortization=0)
+    assert any("убыток" in r for r in decide(working, loss, score(loss), DEFAULT_MODEL).review_reasons)
+    young = _inputs(amount=1_000_000, term_months=24, business_months=8, min_business_months=0, ebit=15_000_000, **fns)
+    assert not any("ФНС" in r for r in decide(working, young, score(young), DEFAULT_MODEL).review_reasons)
+
+
+def test_pipeline_compares_declared_profit_with_fns(anna, db):
+    from app.models import Decision
+
+    app = draft(anna, SV, "WORKING", 1_000_000, 12, fin={**GOOD_FIN, "ebit": 15_000_000})
+    consent_all(anna, app["id"])
+    assert submit_and_process(anna, app["id"])["status"] == "MANUAL_REVIEW"
+    reasons = db.query(Decision).filter_by(application_id=app["id"]).one().review_reasons
+    assert any(r.startswith("Прибыль в анкете") and "по отчётности ФНС — 9,1%" in r for r in reasons)

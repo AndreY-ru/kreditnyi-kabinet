@@ -65,3 +65,41 @@ def fns_transparent(inn: str) -> CallResult:
 def bki_report(inn: str, consent_id: int, purpose: str) -> CallResult:
     return _call("BKI_MOCK", settings.bki_url, f"/report/{inn}",
                  {"consent_id": str(consent_id), "purpose": purpose})
+
+
+# --- Тестовые данные моков (только демо-стенд): служебный API /admin, см. services/sandbox.py ------------
+
+def _admin(source: str, base_url: str, method: str, path: str, body: dict[str, Any] | None = None
+           ) -> tuple[int | None, dict[str, Any]]:
+    try:
+        with _client_for(source, base_url) as client:
+            resp = client.request(method, path, json=body)
+    except httpx.HTTPError as exc:
+        return None, {"detail": str(exc)}
+    try:
+        return resp.status_code, resp.json()
+    except ValueError:
+        return resp.status_code, {"detail": resp.text[:300]}
+
+
+def bki_admin(inn: str, method: str = "GET", loans: list[dict[str, Any]] | None = None
+              ) -> tuple[int | None, dict[str, Any]]:
+    return _admin("BKI_MOCK", settings.bki_url, method, f"/admin/reports/{inn}",
+                  None if loans is None else {"loans": loans})
+
+
+def fns_admin(inn: str, method: str = "GET", fields: dict[str, Any] | None = None
+              ) -> tuple[int | None, dict[str, Any]]:
+    return _admin("FNS_MOCK", settings.fns_url, method, f"/admin/companies/{inn}", fields)
+
+
+def fns_companies() -> tuple[int | None, Any]:
+    return _admin("FNS_MOCK", settings.fns_url, "GET", "/admin/companies")
+
+
+def fns_company_create(fields: dict[str, Any]) -> tuple[int | None, dict[str, Any]]:
+    return _admin("FNS_MOCK", settings.fns_url, "POST", "/admin/companies", fields)
+
+
+def fns_company_remove(inn: str) -> tuple[int | None, dict[str, Any]]:
+    return _admin("FNS_MOCK", settings.fns_url, "DELETE", f"/admin/custom/{inn}")

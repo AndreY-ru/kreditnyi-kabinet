@@ -27,15 +27,33 @@ def test_precheck_matches_real_pipeline_for_stable_company(anna):
     """Регрессия: без вопроса о просрочках проверка занижала оценку на 10 баллов и «Северный ветер»
     с прошлой заявкой (долг 3,5 млн) получал «средние шансы», хотя конвейер одобряет автоматически."""
     draft(anna, SV, "WORKING", 1_000_000, 12)
-    body = _pre(anna, SV, amount=3_000_000).json()
+    body = _pre(anna, SV, amount=2_000_000, term_months=24).json()
     assert body["level"] == "high"
     assert {p["name"]: p["verdict"] for p in body["products"]}["Оборотный кредит"] == "auto"
+
+
+def test_precheck_counts_monthly_payments_and_suggests_longer_term(anna):
+    """3 млн на полгода: платежи с текущими кредитами (218 тыс. ₽ из прошлой заявки) больше прибыли.
+    Та же сумма на два года проходит — срок влияет на решение, а не только на ставку."""
+    draft(anna, SV, "WORKING", 1_000_000, 12)
+    body = _pre(anna, SV, amount=3_000_000, term_months=6).json()
+    pay = next(f for f in body["factors"] if f["title"] == "Ежемесячные платежи")
+    assert pay["tone"] == "bad" and "вместе с текущими кредитами" in pay["text"]
+    assert body["tips"][0].startswith("Комфортная сумма") and body["tips"][1].startswith("Возьмите на")
+    assert "auto" not in {p["verdict"] for p in body["products"]}
+    assert body["level"] == "medium"  # оценка высокая, но платежи больше прибыли — «шансы высокие» было бы неправдой
+    # платёж по текущим кредитам клиент может указать сам: 20 тыс. ₽ вместо 218 тыс. — запас на 12 мес. есть
+    def tone(body):
+        return next(f for f in body["factors"] if f["title"] == "Ежемесячные платежи")["tone"]
+
+    assert tone(_pre(anna, SV, amount=3_000_000).json()) == "bad"
+    assert tone(_pre(anna, SV, amount=3_000_000, debt=3_500_000, monthly_payment=20_000).json()) == "ok"
 
 
 def test_precheck_declared_current_overdue_is_low(anna):
     body = _pre(anna, SV, overdues="current").json()
     assert body["level"] == "low"
-    assert any("просрочку" in t for t in body["tips"])
+    assert any("текущая просрочка — погасите её" in t for t in body["tips"])
 
 
 def test_precheck_young_company_points_to_start_product(anna):
@@ -84,3 +102,30 @@ def test_check_page_and_live_results_render():
                                   "revenue": "84 600 000", "profit": "6 500 000", "debt": "0", "guarantor": "1"})
     assert nojs.status_code == 200 and "Шансы" in nojs.text  # форма без JavaScript тоже работает
     assert part.status_code == 200 and "Шансы" in part.text
+
+
+def test_podbor_sends_current_form_to_check_including_collateral():
+    """Кнопка «Оценить шансы» отправляет форму подбора как есть сейчас, а не ссылку, собранную при загрузке."""
+    c = web_login("anna@demo.local")
+    page = c.get("/podbor").text
+    assert 'form="podbor-form" formaction="/check" formmethod="get"' in page
+    assert '<div class="reveal"' in page  # блок залога под галочкой, раскрывается без JS
+    r = c.get("/check", params={"goal": "working", "amount": "4 000 000", "term": "36", "collateral": "1",
+                                "collateral_kind": "REAL_ESTATE", "collateral_value": "8 000 000", "guarantor": "1"})
+    text = r.text.replace(" ", " ")
+    assert 'id="cc-REAL_ESTATE" name="collateral_kind" value="REAL_ESTATE" checked' in text
+    assert 'name="collateral_value" type="text" inputmode="numeric" data-money value="8 000 000"' in text
+
+
+def test_podbor_opens_chances_in_a_dialog_on_the_same_page():
+    """Оценка шансов из подбора — окном поверх страницы: подбор и всё введённое остаются на месте."""
+    c = web_login("anna@demo.local")
+    page = c.get("/podbor").text
+    assert '<dialog id="chance-dialog"' in page and 'hx-post="/check/panel"' in page
+    r = c.post("/check/panel", data={"goal": "working", "amount": "2 000 000", "term": "24", "collateral": "1",
+                                     "collateral_kind": "VEHICLE", "collateral_value": "3 000 000", "guarantor": "1"})
+    text = r.text.replace(" ", " ")
+    assert r.status_code == 200 and "Шансы на одобрение" in text and "залог: транспорт" in text
+    assert 'name="amount" value="2000000"' in text and 'name="collateral_kind" value="VEHICLE"' in text
+    assert 'id="revenue"' in text and "Шансы высокие" in text  # финансы подставлены, оценка уже посчитана
+    assert 'hx-target="#chance-results"' in text  # правки финансов пересчитываются внутри окна
