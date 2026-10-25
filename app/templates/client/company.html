@@ -30,11 +30,19 @@
 {% if company %}
 <section class="card" aria-labelledby="team-h" style="gap:14px">
 <div class="between"><h2 id="team-h" class="h3">Команда {{ company.name }}</h2><span class="small muted">Кто может работать с заявками</span></div>
+{% set signers = team|selectattr('can_sign')|list|length %}
 {% for m in team %}
 <div class="member">
 <span class="avatar sm {% if m.user_id != user.id %}light{% endif %}" aria-hidden="true">{{ m.user.initials }}</span>
-<div class="who"><span class="m">{{ m.user.full_name }}{% if m.user_id == user.id %} (вы){% endif %}</span>
+<div class="who" style="flex:1"><span class="m">{{ m.user.full_name }}{% if m.user_id == user.id %} (вы){% endif %}</span>
 <span class="small muted">{{ m.position }} · {% if m.can_sign %}оформляет заявки и подписывает договоры{% elif m.can_apply %}оформляет заявки, договор подписывает руководитель{% else %}только просмотр{% endif %}</span></div>
+{% set mine = m.user_id == user.id %}
+{% if (mine or (me and me.can_sign)) and not (m.can_sign and signers <= 1) %}
+<form method="post" action="/company/members/{{ m.user_id }}/remove" data-confirm="{% if mine %}Выйти из команды {{ company.name }}? Заявки компании станут вам недоступны.{% else %}Убрать {{ m.user.full_name }} из команды? Доступ к заявкам компании пропадёт.{% endif %}">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<button class="btn" type="submit" style="min-height:36px;padding:0 12px;font-weight:500">{% if mine %}Выйти{% else %}Убрать{% endif %}</button>
+</form>
+{% endif %}
 </div>
 {% endfor %}
 {% if me and me.can_sign %}

@@ -66,3 +66,24 @@ def test_login_next_is_not_open_redirect():
     assert safe_next("/applications/1") == "/applications/1"
     for bad in ("//evil.example", "/\\evil.example", "https://evil.example", "/x\nLocation: //evil"):
         assert safe_next(bad) == "/"
+
+
+def test_team_member_can_be_removed_but_not_the_last_signer(anna, igor):
+    cid = company_id(igor, SV)
+    team = {m["full_name"]: m["user_id"] for m in igor.get(f"/api/companies/{cid}/members").json()}
+    r = anna.delete(f"/api/companies/{cid}/members/{team['Игорь Смирнов']}")
+    assert r.status_code == 403  # у Анны нет права подписи — убирать других она не может
+    r = igor.delete(f"/api/companies/{cid}/members/{team['Игорь Смирнов']}")
+    assert r.status_code == 422 and r.json()["error"] == "last_signer"  # единственный подписант
+    assert igor.delete(f"/api/companies/{cid}/members/{team['Анна Петрова']}").status_code == 204
+    assert SV not in [c["inn"] for c in anna.get("/api/companies").json()]
+    page = web_login("igor@demo.local").get("/company").text
+    assert "Анна Петрова" not in page
+
+
+def test_member_can_leave_company_in_web():
+    c = web_login("anna@demo.local")
+    page = c.get("/company").text
+    assert "Выйти" in page and "data-confirm" in page
+    r = c.post(f"/company/members/{c.get('/api/auth/me').json()['id']}/remove")
+    assert r.status_code == 200 and "Вы вышли из команды" in r.text

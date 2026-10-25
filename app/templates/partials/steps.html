@@ -16,4 +16,10 @@
 </li>
 {% endfor %}
 </ol>
+{% if app.status == 'DRAFT' %}
+<form method="post" action="/applications/{{ app.id }}/withdraw" data-confirm="Удалить черновик? Восстановить его будет нельзя." style="padding-top:12px;margin-top:8px;border-top:1px solid var(--line)">
+<input type="hidden" name="csrf_token" value="{{ csrf }}">
+<button type="submit" class="linkbtn small" style="color:var(--red)">Удалить черновик</button>
+</form>
+{% endif %}
 </nav>

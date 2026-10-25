@@ -88,3 +88,14 @@ def test_favicon_is_served():
     r = c.get("/favicon.ico")
     assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg+xml")
     assert 'rel="icon"' in c.get("/login").text
+
+
+def test_draft_can_be_deleted_and_disappears_from_lists(anna):
+    app = draft(anna, SV, "WORKING", 1_000_000, 12)
+    c = web_login("anna@demo.local")
+    assert "Удалить черновик" in c.get(f"/applications/{app['id']}/edit").text
+    r = c.post(f"/applications/{app['id']}/withdraw")
+    assert r.status_code == 200 and "Черновик удалён" in r.text
+    for tab in ("active", "done"):
+        page = c.get(f"/cabinet?tab={tab}").text
+        assert f'/applications/{app["id"]}"' not in page and f'/applications/{app["id"]}/edit"' not in page

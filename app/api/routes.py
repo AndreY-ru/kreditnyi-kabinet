@@ -13,7 +13,14 @@ from app.services import analyst as analyst_svc
 from app.services import applications as svc
 from app.services import accounts, client_message, intake, precheck
 from app.services.catalog import match_products
-from app.services.companies import add_company_by_inn, invite_member, require_member, self_check, user_companies
+from app.services.companies import (
+    add_company_by_inn,
+    invite_member,
+    remove_member,
+    require_member,
+    self_check,
+    user_companies,
+)
 from app.services.views import application_view, history_rows, label
 
 router = APIRouter(prefix="/api")
@@ -151,6 +158,14 @@ def company_members(company_id: int, db: Session = Depends(get_db), user: User =
                       .order_by(CompanyMember.id)).all()
     return [s.MemberOut(user_id=m.user_id, full_name=m.user.full_name, position=m.position, can_apply=m.can_apply,
                         can_sign=m.can_sign) for m in rows]
+
+
+@router.delete("/companies/{company_id}/members/{user_id}", status_code=204, tags=["companies"])
+def company_member_remove(company_id: int, user_id: int, db: Session = Depends(get_db),
+                          user: User = Depends(client_user)):
+    """Убрать сотрудника (руководитель с правом подписи) или выйти самому. Последнего подписанта убрать нельзя."""
+    remove_member(db, user, company_id, user_id)
+    db.commit()
 
 
 @router.post("/companies/{company_id}/members", response_model=s.MemberOut, status_code=201, tags=["companies"])

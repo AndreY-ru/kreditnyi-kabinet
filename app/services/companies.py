@@ -113,13 +113,35 @@ def invite_member(db: Session, inviter: User, company_id: int, *, email: str, po
         raise Forbidden("Добавлять сотрудников может руководитель с правом подписи", code="no_sign_right")
     target = db.scalar(select(User).where(User.email == email.strip().lower()))
     if target is None or target.role != "CLIENT":
-        raise NotFound("Пользователь с таким email не зарегистрирован в кабинете", code="user_not_found")
+        raise NotFound("Такого email в кабинете нет. Попросите коллегу зарегистрироваться (ссылка на странице "
+                       "входа), затем добавьте его здесь", code="user_not_found")
     if membership(db, target, company_id) is not None:
         raise ValidationFailed(f"{target.full_name} уже в команде", code="already_member")
     company = db.get(Company, company_id)
     assert company is not None
     return add_member(db, company, target, position=position, can_apply=can_apply, can_sign=can_sign,
                       authority=f"Добавлен(а) руководителем: {inviter.full_name}", actor=inviter)
+
+
+def remove_member(db: Session, actor: User, company_id: int, user_id: int) -> CompanyMember:
+    """Убрать сотрудника из команды (может руководитель с правом подписи) или выйти самому."""
+    me = require_member(db, actor, company_id)
+    if user_id != actor.id and not me.can_sign:
+        raise Forbidden("Убирать сотрудников может руководитель с правом подписи", code="no_sign_right")
+    target = db.scalar(select(CompanyMember).where(CompanyMember.company_id == company_id,
+                                                   CompanyMember.user_id == user_id))
+    if target is None:
+        raise NotFound("Такого сотрудника в команде нет")
+    signers = db.scalar(select(func.count()).select_from(CompanyMember).where(
+        CompanyMember.company_id == company_id, CompanyMember.can_sign.is_(True))) or 0
+    if target.can_sign and signers <= 1:
+        raise ValidationFailed("Нельзя убрать единственного, кто может подписывать договоры: сначала добавьте "
+                               "другого руководителя с правом подписи", code="last_signer")
+    db.add(AuditLog(actor_id=actor.id, action="company.member_remove", entity="company", entity_id=company_id,
+                    data={"user_id": user_id}))
+    db.delete(target)
+    db.flush()
+    return target
 
 
 def self_check(db: Session, company: Company) -> dict:

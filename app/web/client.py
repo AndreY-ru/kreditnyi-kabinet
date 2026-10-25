@@ -18,7 +18,7 @@ from app.security import client_user, verify_csrf
 from app.services import applications as svc
 from app.services import intake, precheck
 from app.services.catalog import GOALS, TERMS, match_products
-from app.services.companies import add_company_by_inn, invite_member, require_member, self_check
+from app.services.companies import add_company_by_inn, invite_member, remove_member, require_member, self_check
 from app.services.validation import active_consent, validate
 from app.services.views import application_view, label
 from app.web.common import active_company, flash, page, partial
@@ -54,6 +54,8 @@ def _app_cards(db: Session, company: Company | None, tab: str) -> tuple[list[dic
                       .order_by(Application.updated_at.desc())).all()
     cards, counts = [], {"active": 0, "done": 0}
     for a in apps:
+        if a.status == S.WITHDRAWN and a.submitted_at is None:
+            continue  # удалённый черновик: в банк не уходил — в списках не показываем (запись остаётся для аудита)
         done = a.status in TERMINAL
         counts["done" if done else "active"] += 1
         if (tab == "done") != done:
@@ -156,6 +158,27 @@ def company_invite(request: Request, email: str = Form(...), position: str = For
                     status_code=e.status_code)
     db.commit()
     flash(request, f"{m.user.full_name} теперь в команде {company.name}")
+    return RedirectResponse("/company", 303)
+
+
+@router.post("/company/members/{user_id}/remove")
+def company_member_remove(request: Request, user_id: int, db: Session = Depends(get_db),
+                          user: User = Depends(client_user)):
+    company, _ = active_company(request, db, user)
+    if company is None:
+        return RedirectResponse("/company", 303)
+    try:
+        m = remove_member(db, user, company.id, user_id)
+    except DomainError as e:
+        db.rollback()
+        flash(request, e.message, "err")
+        return RedirectResponse("/company", 303)
+    db.commit()
+    if user_id == user.id:
+        request.session.pop("company_id", None)
+        flash(request, f"Вы вышли из команды {company.name}", "info")
+        return RedirectResponse("/cabinet", 303)
+    flash(request, f"{m.user.full_name} больше не в команде {company.name}", "info")
     return RedirectResponse("/company", 303)
 
 
@@ -446,9 +469,10 @@ def status_live(request: Request, app_id: int, since: str = "", db: Session = De
 @router.post("/applications/{app_id}/withdraw")
 def withdraw(request: Request, app_id: int, db: Session = Depends(get_db), user: User = Depends(client_user)):
     app = svc.get_application(db, user, app_id)
+    was_draft = app.status == S.DRAFT
     svc.withdraw(db, app, user)
     db.commit()
-    flash(request, f"Заявка {app.number} отозвана", "info")
+    flash(request, "Черновик удалён" if was_draft else f"Заявка {app.number} отозвана", "info")
     return RedirectResponse("/cabinet", 303)
 
 
