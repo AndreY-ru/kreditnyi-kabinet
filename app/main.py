@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Умный кредитный кабинет предпринимателя",
-        version="0.1.0",
+        version="1.0.0",
         description="MVP для хакатона «Альфа Будущее». Все данные синтетические, ФНС и БКИ смоделированы.",
         docs_url="/api/docs",
         redoc_url=None,

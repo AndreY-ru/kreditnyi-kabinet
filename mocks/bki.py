@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Query
 
 from mocks.data import get_company
 
-app = FastAPI(title="BKI mock (смоделировано)", version="0.1.0")
+app = FastAPI(title="BKI mock (смоделировано)", version="1.0.0")
 FAIL_RATE = float(os.getenv("BKI_FAIL_RATE", "0"))
 
 

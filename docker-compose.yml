@@ -33,7 +33,7 @@ services:
 
   fns-mock:
     build: { context: ., dockerfile: mocks/Dockerfile }
-    image: kreditnyi-kabinet-mocks:0.1.0
+    image: kreditnyi-kabinet-mocks:1.0.0
     environment:
       PORT: "8101"
       FNS_FAIL_RATE: ${FNS_FAIL_RATE:-0}
@@ -41,7 +41,7 @@ services:
 
   bki-mock:
     build: { context: ., dockerfile: mocks/Dockerfile }
-    image: kreditnyi-kabinet-mocks:0.1.0
+    image: kreditnyi-kabinet-mocks:1.0.0
     environment:
       PORT: "8102"
       BKI_FAIL_RATE: ${BKI_FAIL_RATE:-0}
@@ -49,7 +49,7 @@ services:
 
   app:
     build: .
-    image: kreditnyi-kabinet-app:0.1.0
+    image: kreditnyi-kabinet-app:1.0.0
     environment: *app-env
     ports:
       - "8000:8000"
@@ -62,7 +62,7 @@ services:
 
   worker:
     build: .
-    image: kreditnyi-kabinet-app:0.1.0
+    image: kreditnyi-kabinet-app:1.0.0
     environment: *app-env
     command: ["python", "-m", "app.worker"]
     healthcheck:

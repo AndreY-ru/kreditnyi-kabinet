@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException
 
 from mocks.data import FNS_ALWAYS_DOWN, get_company
 
-app = FastAPI(title="FNS mock (смоделировано)", version="0.1.0")
+app = FastAPI(title="FNS mock (смоделировано)", version="1.0.0")
 FAIL_RATE = float(os.getenv("FNS_FAIL_RATE", "0"))
 EXTRA_DOWN = {x.strip() for x in os.getenv("FNS_FAIL_INNS", "").split(",") if x.strip()}
 
